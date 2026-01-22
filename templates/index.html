@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CheatSheet Maker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>CheatSheet Maker</h2>
+                <button class="btn btn-icon sidebar-toggle" onclick="toggleSidebar()" title="Collapse sidebar">◀</button>
+            </div>
+            <div class="sidebar-content">
+                <button class="btn btn-primary new-btn" onclick="newCheatsheet()">+ New Cheatsheet</button>
+
+                <!-- Groups Section -->
+                <div class="groups-header">
+                    <h3>Groups</h3>
+                    <button class="btn btn-icon btn-add-group" onclick="showCreateGroupModal()" title="Create new group">+</button>
+                </div>
+                <div class="groups-container" id="groupsContainer">
+                    {% for group in groups %}
+                    <div class="group-section" data-group-id="{{ group.id }}">
+                        <div class="group-header" onclick="toggleGroup(this)">
+                            <span class="group-color" style="background: {{ group.color }}"></span>
+                            <span class="group-name">{{ group.name }}</span>
+                            <span class="group-toggle">▼</span>
+                            <button class="btn btn-icon btn-delete-group" onclick="event.stopPropagation(); deleteGroup('{{ group.id }}')" title="Delete group">×</button>
+                        </div>
+                        <ul class="group-cheatsheets">
+                            {% for cs in cheatsheets %}
+                            {% if cs.group == group.id %}
+                            <li class="cheatsheet-item" data-id="{{ cs.id }}" data-group="{{ cs.group }}">
+                                <span class="cheatsheet-name" title="{{ cs.title }}">{{ cs.title }}</span>
+                                <div class="cheatsheet-actions">
+                                    <button onclick="loadCheatsheet('{{ cs.id }}')" title="Edit">✏️</button>
+                                    <button onclick="previewCheatsheet('{{ cs.id }}')" title="Preview">👁️</button>
+                                    <button onclick="previewFullscreen('{{ cs.id }}')" title="Open in new tab">🔳</button>
+                                    <button onclick="printToPdf('{{ cs.id }}')" title="Print / PDF">🖨️</button>
+                                    <button onclick="downloadCheatsheet('{{ cs.id }}')" title="Download HTML">⬇️</button>
+                                    <button onclick="downloadJsonCheatsheet('{{ cs.id }}')" title="Download JSON">{ }</button>
+                                    <button onclick="moveToGroup('{{ cs.id }}')" title="Move to group">📁</button>
+                                    <button onclick="deleteCheatsheet('{{ cs.id }}')" title="Delete">🗑️</button>
+                                </div>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Ungrouped Cheatsheets -->
+                <h3>Ungrouped</h3>
+                <ul class="cheatsheet-list" id="cheatsheetList">
+                    {% for cs in cheatsheets %}
+                    {% if not cs.group %}
+                    <li class="cheatsheet-item" data-id="{{ cs.id }}" data-group="">
+                        <span class="cheatsheet-name" title="{{ cs.title }}">{{ cs.title }}</span>
+                        <div class="cheatsheet-actions">
+                            <button onclick="loadCheatsheet('{{ cs.id }}')" title="Edit">✏️</button>
+                            <button onclick="previewCheatsheet('{{ cs.id }}')" title="Preview">👁️</button>
+                            <button onclick="previewFullscreen('{{ cs.id }}')" title="Open in new tab">🔳</button>
+                            <button onclick="printToPdf('{{ cs.id }}')" title="Print / PDF">🖨️</button>
+                            <button onclick="downloadCheatsheet('{{ cs.id }}')" title="Download HTML">⬇️</button>
+                            <button onclick="downloadJsonCheatsheet('{{ cs.id }}')" title="Download JSON">{ }</button>
+                            <button onclick="moveToGroup('{{ cs.id }}')" title="Move to group">📁</button>
+                            <button onclick="deleteCheatsheet('{{ cs.id }}')" title="Delete">🗑️</button>
+                        </div>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Editor -->
+        <main class="editor">
+            <div class="editor-header">
+                <input type="text" id="cheatsheetTitle" class="title-input" placeholder="Enter Cheatsheet Title..." value="">
+                <div class="editor-actions">
+                    <button class="btn btn-undo" onclick="undo()" title="Undo (Ctrl+Z)" disabled>↶ Undo</button>
+                    <button class="btn btn-redo" onclick="redo()" title="Redo (Ctrl+Y)" disabled>↷ Redo</button>
+                    <div class="action-divider"></div>
+                    <button class="btn btn-fold" onclick="foldAllSections()" title="Collapse all sections">▲ Fold All</button>
+                    <button class="btn btn-unfold" onclick="unfoldAllSections()" title="Expand all sections">▼ Unfold All</button>
+                    <div class="action-divider"></div>
+                    <button class="btn btn-secondary" onclick="previewCurrent()">Preview</button>
+                    <button class="btn btn-primary" onclick="saveCheatsheet()">Save & Generate</button>
+                </div>
+            </div>
+
+            <!-- Section Navigator -->
+            <div class="section-navigator" id="sectionNavigator">
+                <div class="nav-header">
+                    <span>Sections</span>
+                    <button class="btn btn-icon" onclick="toggleNavigator()" title="Close">×</button>
+                </div>
+                <ul class="nav-list" id="navList">
+                    <!-- Populated dynamically -->
+                </ul>
+            </div>
+            <button class="btn btn-nav-toggle" onclick="toggleNavigator()" title="Show section navigator (Ctrl+G)">☰</button>
+
+            <div class="sections-container" id="sectionsContainer">
+                <!-- Sections will be added here -->
+            </div>
+
+            <button class="btn btn-add-section" onclick="addSection()">+ Add Section</button>
+        </main>
+    </div>
+
+    <!-- Section Template -->
+    <template id="sectionTemplate">
+        <div class="section-editor" data-section-index="">
+            <button class="btn btn-insert-before btn-insert-section" onclick="insertSectionBefore(this)" title="Insert section above">+</button>
+            <div class="section-editor-header">
+                <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                <button class="btn btn-icon btn-toggle-section" onclick="toggleSectionEditor(this)" title="Fold/Unfold">▼</button>
+                <div class="section-number-badge"></div>
+                <input type="text" class="section-title-input" placeholder="Section Title...">
+                <button class="btn btn-icon btn-remove-section" onclick="removeSection(this)" title="Remove Section">×</button>
+            </div>
+            <div class="section-editor-content">
+                <div class="section-extra-fields">
+                    <input type="text" class="section-description-input" placeholder="Description for index (optional)...">
+                    <div class="images-container">
+                        <!-- Images will be added here -->
+                    </div>
+                    <button class="btn btn-add-image" onclick="addImageSlot(this)">+ Add Image</button>
+                </div>
+                <div class="code-lines-container">
+                    <!-- Code lines will be added here -->
+                </div>
+                <div class="section-buttons">
+                    <button class="btn btn-add-line" onclick="addCodeLine(this)">+ Add Code Line</button>
+                    <button class="btn btn-add-subsection" onclick="addSubsection(this)">+ Add Subsection</button>
+                </div>
+                <div class="subsections-container">
+                    <!-- Subsections will be added here -->
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Subsection Template -->
+    <template id="subsectionTemplate">
+        <div class="subsection-editor" data-subsection-index="">
+            <button class="btn btn-insert-before btn-insert-subsection" onclick="insertSubsectionBefore(this)" title="Insert subsection above">+</button>
+            <div class="subsection-editor-header">
+                <span class="drag-handle drag-handle-small" title="Drag to reorder">⋮⋮</span>
+                <button class="btn btn-icon btn-toggle-subsection" onclick="toggleSubsectionEditor(this)" title="Fold/Unfold">▼</button>
+                <div class="subsection-number-badge"></div>
+                <input type="text" class="subsection-title-input" placeholder="Subsection Title...">
+                <button class="btn btn-icon btn-remove-subsection" onclick="removeSubsection(this)" title="Remove Subsection">×</button>
+            </div>
+            <div class="subsection-editor-content">
+                <div class="subsection-extra-fields">
+                    <div class="images-container">
+                        <!-- Images will be added here -->
+                    </div>
+                    <button class="btn btn-add-image" onclick="addImageSlot(this)">+ Add Image</button>
+                </div>
+                <div class="code-lines-container">
+                    <!-- Code lines will be added here -->
+                </div>
+                <button class="btn btn-add-line" onclick="addCodeLine(this)">+ Add Code Line</button>
+            </div>
+        </div>
+    </template>
+
+    <!-- Image Upload Template -->
+    <template id="imageUploadTemplate">
+        <div class="image-upload-area">
+            <input type="file" class="image-input" accept="image/*" onchange="handleImageUpload(this)">
+            <span class="image-label">Click to select image</span>
+            <div class="image-preview-container" style="display: none;">
+                <img class="image-preview" src="" alt="Preview">
+                <div class="image-controls">
+                    <div class="image-dimensions">
+                        <label>Size:</label>
+                        <input type="number" class="image-width-input" placeholder="100" min="5" max="100" title="Width percentage">
+                        <span class="dimension-hint">% width</span>
+                    </div>
+                    <button class="btn btn-icon btn-remove-image" onclick="removeImage(this)" title="Remove Image">×</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Code Line Template -->
+    <template id="codeLineTemplate">
+        <div class="code-line-editor" data-line-type="code">
+            <button class="btn btn-insert-before btn-insert-line" onclick="insertCodeLineBefore(this)" title="Insert line above">+</button>
+            <span class="drag-handle drag-handle-line" title="Drag to reorder">⋮</span>
+            <div class="line-type-toggle">
+                <button type="button" class="type-btn active" data-type="code" onclick="setLineType(this, 'code')" title="Code">{ }</button>
+                <button type="button" class="type-btn" data-type="text" onclick="setLineType(this, 'text')" title="Text">T</button>
+            </div>
+            <div class="code-line-inputs code-inputs">
+                <input type="text" class="command-input" placeholder="Code command (use {method:text}, {param:text}, {str:text} for highlighting)">
+                <input type="text" class="comment-input" placeholder="Comment">
+            </div>
+            <div class="code-line-inputs text-inputs" style="display: none;">
+                <textarea class="text-input" placeholder="Enter text content (use - or * for bullets, 1. 2. for numbers)..." rows="2"></textarea>
+            </div>
+            <button class="btn btn-icon btn-remove-line" onclick="removeCodeLine(this)" title="Remove Line">×</button>
+        </div>
+    </template>
+
+    <!-- Preview Modal -->
+    <div class="modal" id="previewModal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>Preview</h3>
+                <button class="btn btn-icon" onclick="closePreview()">×</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="previewFrame" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div class="modal" id="createGroupModal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>Create Group</h3>
+                <button class="btn btn-icon" onclick="closeCreateGroupModal()">×</button>
+            </div>
+            <div class="modal-body-form">
+                <label for="groupName">Group Name</label>
+                <input type="text" id="groupName" class="form-input" placeholder="Enter group name...">
+                <label for="groupColor">Color</label>
+                <div class="color-picker">
+                    <input type="color" id="groupColor" value="#667eea">
+                    <span class="color-preview" id="colorPreview" style="background: #667eea"></span>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeCreateGroupModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="createGroup()">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Move to Group Modal -->
+    <div class="modal" id="moveToGroupModal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>Move to Group</h3>
+                <button class="btn btn-icon" onclick="closeMoveToGroupModal()">×</button>
+            </div>
+            <div class="modal-body-form">
+                <label>Select Group</label>
+                <select id="groupSelect" class="form-select">
+                    <option value="">-- No Group --</option>
+                    {% for group in groups %}
+                    <option value="{{ group.id }}">{{ group.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeMoveToGroupModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="confirmMoveToGroup()">Move</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // Load groups data
+        window.groupsData = {{ groups | tojson | safe if groups else '[]' }};
+    </script>
+    {% if edit_data %}
+    <script>
+        // Load existing cheatsheet data for editing
+        window.editData = {{ edit_data | tojson | safe }};
+    </script>
+    {% endif %}
+</body>
+</html>

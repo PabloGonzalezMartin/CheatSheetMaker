@@ -1,0 +1,2003 @@
+/**
+ * CheatSheet Maker - Frontend JavaScript (Fixed Version)
+ */
+
+// Current cheatsheet state
+let currentCheatsheet = {
+    id: null,
+    title: '',
+    sections: []
+};
+
+// Undo/Redo history
+const historyStack = [];
+const redoStack = [];
+const MAX_HISTORY = 50;
+let isUndoRedoAction = false;
+let saveHistoryTimeout = null;
+
+// Cleanup tracking
+let dragObserver = null;
+let modalClickListener = null;
+let keyboardListener = null;
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Safe DOM element getter
+ */
+function safeGetElement(id) {
+    const element = document.getElementById(id);
+    if (!element) {
+        console.error(`Element with id "${id}" not found`);
+    }
+    return element;
+}
+
+/**
+ * Validate button element
+ */
+function validateButton(button) {
+    if (!button || !(button instanceof HTMLElement)) {
+        console.error('Invalid button element');
+        return false;
+    }
+    return true;
+}
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', () => {
+    initializeApp();
+});
+
+/**
+ * Initialize the application
+ */
+function initializeApp() {
+    // Check if we're editing an existing cheatsheet
+    if (window.editData) {
+        loadCheatsheetData(window.editData);
+    } else {
+        // Start with one empty section
+        addSection();
+    }
+
+    // Save initial state to history
+    setTimeout(() => {
+        const initialState = collectEditorData();
+        if (initialState) {
+            historyStack.push(initialState);
+            updateUndoRedoButtons();
+        }
+    }, 100);
+
+    // Restore sidebar state
+    restoreSidebarState();
+
+    // Setup event listeners
+    setupEventListeners();
+
+    // Setup drag and drop
+    setTimeout(setupDragAndDrop, 200);
+}
+
+/**
+ * Setup all event listeners
+ */
+function setupEventListeners() {
+    // Keyboard shortcuts
+    if (keyboardListener) {
+        document.removeEventListener('keydown', keyboardListener);
+    }
+    keyboardListener = handleKeyboardShortcuts;
+    document.addEventListener('keydown', keyboardListener);
+
+    // Modal click listener
+    const previewModal = safeGetElement('previewModal');
+    if (previewModal) {
+        if (modalClickListener) {
+            previewModal.removeEventListener('click', modalClickListener);
+        }
+        modalClickListener = (e) => {
+            if (e.target === e.currentTarget) {
+                closePreview();
+            }
+        };
+        previewModal.addEventListener('click', modalClickListener);
+    }
+
+    // Input change tracking for undo/redo
+    document.addEventListener('input', handleInputChange);
+
+    // Color picker preview
+    const colorInput = safeGetElement('groupColor');
+    const colorPreview = safeGetElement('colorPreview');
+    if (colorInput && colorPreview) {
+        colorInput.addEventListener('input', () => {
+            colorPreview.style.background = colorInput.value;
+        });
+    }
+
+    // Modal outside click handlers
+    document.addEventListener('click', handleModalOutsideClick);
+}
+
+/**
+ * Handle keyboard shortcuts
+ */
+function handleKeyboardShortcuts(e) {
+    // Ctrl+S to save
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        saveCheatsheet();
+    }
+
+    // Ctrl+G to toggle navigator
+    if (e.ctrlKey && e.key === 'g') {
+        e.preventDefault();
+        toggleNavigator();
+    }
+
+    // Ctrl+Z for undo
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+    }
+
+    // Ctrl+Y or Ctrl+Shift+Z for redo
+    if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+        e.preventDefault();
+        redo();
+    }
+
+    // Escape to close modal or navigator
+    if (e.key === 'Escape') {
+        closePreview();
+        const navigator = safeGetElement('sectionNavigator');
+        if (navigator && navigator.classList.contains('active')) {
+            navigator.classList.remove('active');
+        }
+    }
+}
+
+/**
+ * Handle input changes for undo/redo
+ */
+function handleInputChange(e) {
+    if (e.target.matches('.title-input, .section-title-input, .subsection-title-input, .section-description-input, .command-input, .comment-input, .text-input, .image-width-input')) {
+        saveToHistory();
+    }
+}
+
+/**
+ * Handle modal outside clicks
+ */
+function handleModalOutsideClick(e) {
+    if (e.target.id === 'createGroupModal') {
+        closeCreateGroupModal();
+    }
+    if (e.target.id === 'moveToGroupModal') {
+        closeMoveToGroupModal();
+    }
+}
+
+/**
+ * Restore sidebar state from localStorage
+ */
+function restoreSidebarState() {
+    try {
+        const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        if (sidebarCollapsed) {
+            const sidebar = safeGetElement('sidebar');
+            if (sidebar) {
+                sidebar.classList.add('collapsed');
+            }
+        }
+    } catch (error) {
+        console.error('Error restoring sidebar state:', error);
+    }
+}
+
+/**
+ * Load cheatsheet data into the editor
+ */
+function loadCheatsheetData(data) {
+    if (!data) {
+        console.error('No data provided to load');
+        return;
+    }
+
+    currentCheatsheet.id = data.id;
+    
+    const titleInput = safeGetElement('cheatsheetTitle');
+    if (titleInput) {
+        titleInput.value = data.title || '';
+    }
+
+    // Clear existing sections
+    const container = safeGetElement('sectionsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+
+    // Add sections from data
+    if (data.sections && data.sections.length > 0) {
+        data.sections.forEach((section, index) => {
+            const sectionEl = createSectionElement(index + 1);
+            if (!sectionEl) return;
+
+            const sectionTitleInput = sectionEl.querySelector('.section-title-input');
+            if (sectionTitleInput) {
+                sectionTitleInput.value = section.title || '';
+            }
+
+            // Load description
+            const descInput = sectionEl.querySelector('.section-description-input');
+            if (descInput && section.description) {
+                descInput.value = section.description;
+            }
+
+            // Load images (support both old 'image' and new 'images' format)
+            const imagesContainer = sectionEl.querySelector('.images-container');
+            if (imagesContainer) {
+                let imagesToLoad = [];
+                if (section.images && section.images.length > 0) {
+                    imagesToLoad = section.images;
+                } else if (section.image) {
+                    imagesToLoad = [section.image];
+                }
+                imagesToLoad.forEach(imageData => {
+                    loadImageToContainer(imagesContainer, imageData);
+                });
+            }
+
+            // Add code lines
+            const linesContainer = sectionEl.querySelector('.code-lines-container');
+            if (linesContainer) {
+                if (section.lines && section.lines.length > 0) {
+                    section.lines.forEach(line => {
+                        loadCodeLine(linesContainer, line);
+                    });
+                } else {
+                    // Add one empty line
+                    linesContainer.appendChild(createCodeLineElement());
+                }
+            }
+
+            // Add subsections
+            if (section.subsections && section.subsections.length > 0) {
+                const subsectionsContainer = sectionEl.querySelector('.subsections-container');
+                if (subsectionsContainer) {
+                    section.subsections.forEach((subsection, subIndex) => {
+                        loadSubsection(subsectionsContainer, subsection, index + 1, subIndex + 1);
+                    });
+                }
+            }
+
+            container.appendChild(sectionEl);
+        });
+    } else {
+        addSection();
+    }
+}
+
+/**
+ * Load an image to a container
+ */
+function loadImageToContainer(container, imageData) {
+    const imageUpload = createImageUploadElement();
+    if (!imageUpload) return;
+
+    const previewContainer = imageUpload.querySelector('.image-preview-container');
+    const preview = imageUpload.querySelector('.image-preview');
+    const label = imageUpload.querySelector('.image-label');
+    const widthInput = imageUpload.querySelector('.image-width-input');
+    const fileInput = imageUpload.querySelector('.image-input');
+
+    if (!preview || !previewContainer || !label || !fileInput) return;
+
+    // Support both string (old format) and object (new format with dimensions)
+    if (typeof imageData === 'string') {
+        preview.src = imageData;
+    } else {
+        preview.src = imageData.src;
+        if (widthInput && imageData.widthPercent) {
+            widthInput.value = imageData.widthPercent;
+        }
+    }
+    previewContainer.style.display = 'block';
+    label.style.display = 'none';
+    fileInput.style.display = 'none';
+    container.appendChild(imageUpload);
+}
+
+/**
+ * Load a code line into a container
+ */
+function loadCodeLine(container, line) {
+    const lineEl = createCodeLineElement();
+    if (!lineEl) return;
+
+    const lineType = line.type || 'code';
+
+    if (lineType === 'text') {
+        // Set to text mode
+        lineEl.dataset.lineType = 'text';
+        const codeInputs = lineEl.querySelector('.code-inputs');
+        const textInputs = lineEl.querySelector('.text-inputs');
+        const textInput = lineEl.querySelector('.text-input');
+        const codeBtns = lineEl.querySelectorAll('.type-btn');
+
+        if (codeInputs) codeInputs.style.display = 'none';
+        if (textInputs) textInputs.style.display = 'flex';
+        if (textInput) textInput.value = line.text || '';
+        
+        codeBtns.forEach(btn => {
+            if (btn.dataset.type === 'text') {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    } else {
+        const commandInput = lineEl.querySelector('.command-input');
+        const commentInput = lineEl.querySelector('.comment-input');
+        if (commandInput) commandInput.value = line.command || '';
+        if (commentInput) commentInput.value = line.comment || '';
+    }
+    container.appendChild(lineEl);
+}
+
+/**
+ * Load a subsection into a container
+ */
+function loadSubsection(container, subsection, sectionNum, subNum) {
+    const subsectionEl = createSubsectionElement(sectionNum, subNum);
+    if (!subsectionEl) return;
+
+    const subTitleInput = subsectionEl.querySelector('.subsection-title-input');
+    if (subTitleInput) {
+        subTitleInput.value = subsection.title || '';
+    }
+
+    // Load subsection images
+    const subImagesContainer = subsectionEl.querySelector('.images-container');
+    if (subImagesContainer) {
+        let subImagesToLoad = [];
+        if (subsection.images && subsection.images.length > 0) {
+            subImagesToLoad = subsection.images;
+        } else if (subsection.image) {
+            subImagesToLoad = [subsection.image];
+        }
+        subImagesToLoad.forEach(imageData => {
+            loadImageToContainer(subImagesContainer, imageData);
+        });
+    }
+
+    // Add subsection code lines
+    const subLinesContainer = subsectionEl.querySelector('.code-lines-container');
+    if (subLinesContainer) {
+        if (subsection.lines && subsection.lines.length > 0) {
+            subsection.lines.forEach(line => {
+                loadCodeLine(subLinesContainer, line);
+            });
+        } else {
+            subLinesContainer.appendChild(createCodeLineElement());
+        }
+    }
+
+    container.appendChild(subsectionEl);
+}
+
+/**
+ * Create a new section element
+ * @param {number} number - Section number
+ * @param {boolean} collapsed - Whether to start collapsed (default: true)
+ */
+function createSectionElement(number, collapsed = true) {
+    const template = safeGetElement('sectionTemplate');
+    if (!template || !template.content) {
+        console.error('Section template not found');
+        return null;
+    }
+
+    const clone = template.content.cloneNode(true);
+    const section = clone.querySelector('.section-editor');
+    if (!section) return null;
+
+    section.dataset.sectionIndex = number;
+    const badge = section.querySelector('.section-number-badge');
+    if (badge) {
+        badge.textContent = number;
+    }
+
+    // Sections are collapsed by default
+    if (collapsed) {
+        section.classList.add('collapsed');
+    }
+
+    return section;
+}
+
+/**
+ * Create a new subsection element
+ * @param {number} sectionNum - Section number
+ * @param {number} subsectionNum - Subsection number
+ * @param {boolean} collapsed - Whether to start collapsed (default: true)
+ */
+function createSubsectionElement(sectionNum, subsectionNum, collapsed = true) {
+    const template = safeGetElement('subsectionTemplate');
+    if (!template || !template.content) {
+        console.error('Subsection template not found');
+        return null;
+    }
+
+    const clone = template.content.cloneNode(true);
+    const subsection = clone.querySelector('.subsection-editor');
+    if (!subsection) return null;
+
+    subsection.dataset.subsectionIndex = subsectionNum;
+    const badge = subsection.querySelector('.subsection-number-badge');
+    if (badge) {
+        badge.textContent = `${sectionNum}.${subsectionNum}`;
+    }
+
+    // Subsections are collapsed by default
+    if (collapsed) {
+        subsection.classList.add('collapsed');
+    }
+
+    return subsection;
+}
+
+/**
+ * Create a new code line element
+ */
+function createCodeLineElement() {
+    const template = safeGetElement('codeLineTemplate');
+    if (!template || !template.content) {
+        console.error('Code line template not found');
+        return null;
+    }
+
+    const clone = template.content.cloneNode(true);
+    return clone.querySelector('.code-line-editor');
+}
+
+/**
+ * Create a new image upload element
+ */
+function createImageUploadElement() {
+    const template = safeGetElement('imageUploadTemplate');
+    if (!template || !template.content) {
+        console.error('Image upload template not found');
+        return null;
+    }
+
+    const clone = template.content.cloneNode(true);
+    return clone.querySelector('.image-upload-area');
+}
+
+/**
+ * Add a new image slot to a section or subsection
+ */
+function addImageSlot(button) {
+    if (!validateButton(button)) return;
+
+    const container = button.closest('.section-extra-fields, .subsection-extra-fields');
+    if (!container) return;
+
+    const imagesContainer = container.querySelector('.images-container');
+    if (!imagesContainer) return;
+
+    const imageUpload = createImageUploadElement();
+    if (!imageUpload) return;
+
+    imagesContainer.appendChild(imageUpload);
+
+    // Trigger file selection
+    const fileInput = imageUpload.querySelector('.image-input');
+    if (fileInput) {
+        fileInput.click();
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Add a new section
+ */
+function addSection() {
+    const container = safeGetElement('sectionsContainer');
+    if (!container) return;
+
+    const sectionCount = container.children.length + 1;
+
+    // New sections are expanded so user can edit them
+    const section = createSectionElement(sectionCount, false);
+    if (!section) return;
+
+    // Add one empty code line
+    const linesContainer = section.querySelector('.code-lines-container');
+    if (linesContainer) {
+        const codeLine = createCodeLineElement();
+        if (codeLine) {
+            linesContainer.appendChild(codeLine);
+        }
+    }
+
+    container.appendChild(section);
+
+    // Setup drag and drop for new section
+    initDragDrop(section, 'section-editor');
+
+    // Focus on the section title
+    const titleInput = section.querySelector('.section-title-input');
+    if (titleInput) {
+        titleInput.focus();
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Add a new subsection to a section
+ */
+function addSubsection(button) {
+    if (!validateButton(button)) return;
+
+    const section = button.closest('.section-editor');
+    if (!section) return;
+
+    const sectionNum = parseInt(section.dataset.sectionIndex);
+    const subsectionsContainer = section.querySelector('.subsections-container');
+    if (!subsectionsContainer) return;
+
+    const subsectionCount = subsectionsContainer.children.length + 1;
+
+    // New subsections are expanded so user can edit them
+    const subsection = createSubsectionElement(sectionNum, subsectionCount, false);
+    if (!subsection) return;
+
+    // Add one empty code line
+    const linesContainer = subsection.querySelector('.code-lines-container');
+    if (linesContainer) {
+        const codeLine = createCodeLineElement();
+        if (codeLine) {
+            linesContainer.appendChild(codeLine);
+        }
+    }
+
+    subsectionsContainer.appendChild(subsection);
+
+    // Setup drag and drop for new subsection
+    initDragDrop(subsection, 'subsection-editor');
+
+    // Focus on the subsection title
+    const titleInput = subsection.querySelector('.subsection-title-input');
+    if (titleInput) {
+        titleInput.focus();
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Remove a section
+ */
+function removeSection(button) {
+    if (!validateButton(button)) return;
+
+    const section = button.closest('.section-editor');
+    if (!section) return;
+
+    const container = safeGetElement('sectionsContainer');
+    if (!container) return;
+
+    if (container.children.length > 1) {
+        section.remove();
+        updateSectionNumbers();
+        saveToHistory();
+    } else {
+        alert('You must have at least one section.');
+    }
+}
+
+/**
+ * Remove a subsection
+ */
+function removeSubsection(button) {
+    if (!validateButton(button)) return;
+
+    const subsection = button.closest('.subsection-editor');
+    if (!subsection) return;
+
+    const section = subsection.closest('.section-editor');
+    subsection.remove();
+    
+    if (section) {
+        updateSubsectionNumbers(section);
+    }
+    saveToHistory();
+}
+
+/**
+ * Update section numbers after removal
+ */
+function updateSectionNumbers() {
+    const container = safeGetElement('sectionsContainer');
+    if (!container) return;
+
+    const sections = container.querySelectorAll('.section-editor');
+
+    sections.forEach((section, index) => {
+        const newNum = index + 1;
+        section.dataset.sectionIndex = newNum;
+        const badge = section.querySelector('.section-number-badge');
+        if (badge) {
+            badge.textContent = newNum;
+        }
+
+        // Update subsection numbers too
+        updateSubsectionNumbers(section);
+    });
+}
+
+/**
+ * Update subsection numbers within a section
+ */
+function updateSubsectionNumbers(section) {
+    if (!section) return;
+
+    const sectionNum = section.dataset.sectionIndex;
+    const subsections = section.querySelectorAll('.subsection-editor');
+
+    subsections.forEach((subsection, index) => {
+        const newSubNum = index + 1;
+        subsection.dataset.subsectionIndex = newSubNum;
+        const badge = subsection.querySelector('.subsection-number-badge');
+        if (badge) {
+            badge.textContent = `${sectionNum}.${newSubNum}`;
+        }
+    });
+}
+
+/**
+ * Add a new code line to a section or subsection
+ */
+function addCodeLine(button) {
+    if (!validateButton(button)) return;
+
+    const container = button.closest('.section-editor, .subsection-editor');
+    if (!container) return;
+
+    const linesContainer = container.querySelector('.code-lines-container');
+    if (!linesContainer) return;
+
+    const newLine = createCodeLineElement();
+    if (!newLine) return;
+
+    linesContainer.appendChild(newLine);
+
+    // Setup drag and drop for new line
+    initDragDrop(newLine, 'code-line-editor');
+
+    // Focus on the command input
+    const commandInput = newLine.querySelector('.command-input');
+    if (commandInput) {
+        commandInput.focus();
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Remove a code line
+ */
+function removeCodeLine(button) {
+    if (!validateButton(button)) return;
+
+    const line = button.closest('.code-line-editor');
+    if (!line) return;
+
+    const container = line.closest('.code-lines-container');
+    if (!container) return;
+
+    if (container.children.length > 1) {
+        line.remove();
+        saveToHistory();
+    } else {
+        // Clear the inputs instead of removing the last line
+        const commandInput = line.querySelector('.command-input');
+        const commentInput = line.querySelector('.comment-input');
+        const textInput = line.querySelector('.text-input');
+        
+        if (commandInput) commandInput.value = '';
+        if (commentInput) commentInput.value = '';
+        if (textInput) textInput.value = '';
+        
+        saveToHistory();
+    }
+}
+
+/**
+ * Set line type (code or text)
+ */
+function setLineType(button, type) {
+    if (!validateButton(button)) return;
+
+    const lineEditor = button.closest('.code-line-editor');
+    if (!lineEditor) return;
+
+    const codeInputs = lineEditor.querySelector('.code-inputs');
+    const textInputs = lineEditor.querySelector('.text-inputs');
+    const toggleBtns = lineEditor.querySelectorAll('.type-btn');
+
+    // Update active button
+    toggleBtns.forEach(btn => btn.classList.remove('active'));
+    button.classList.add('active');
+
+    // Update data attribute
+    lineEditor.dataset.lineType = type;
+
+    // Show/hide appropriate inputs
+    if (type === 'text') {
+        if (codeInputs) codeInputs.style.display = 'none';
+        if (textInputs) textInputs.style.display = 'flex';
+    } else {
+        if (codeInputs) codeInputs.style.display = 'flex';
+        if (textInputs) textInputs.style.display = 'none';
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Handle image upload and convert to base64
+ */
+function handleImageUpload(input) {
+    if (!input || !input.files) return;
+
+    const file = input.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file.');
+        return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB.');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const uploadArea = input.closest('.image-upload-area');
+        if (!uploadArea) return;
+
+        const previewContainer = uploadArea.querySelector('.image-preview-container');
+        const preview = uploadArea.querySelector('.image-preview');
+        const label = uploadArea.querySelector('.image-label');
+
+        if (!preview || !previewContainer || !label) return;
+
+        preview.src = e.target.result;
+        previewContainer.style.display = 'block';
+        label.style.display = 'none';
+        input.style.display = 'none';
+
+        // Save to history for undo/redo
+        saveToHistory();
+    };
+    
+    reader.onerror = function() {
+        alert('Error reading image file. Please try again.');
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+/**
+ * Remove an image
+ */
+function removeImage(button) {
+    if (!validateButton(button)) return;
+
+    const uploadArea = button.closest('.image-upload-area');
+    if (!uploadArea) return;
+
+    const previewContainer = uploadArea.querySelector('.image-preview-container');
+    const preview = uploadArea.querySelector('.image-preview');
+    const label = uploadArea.querySelector('.image-label');
+    const input = uploadArea.querySelector('.image-input');
+
+    if (preview) preview.src = '';
+    if (previewContainer) previewContainer.style.display = 'none';
+    if (label) label.style.display = 'block';
+    if (input) {
+        input.value = '';
+        input.style.display = 'block';
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Collect data from the editor
+ */
+function collectEditorData() {
+    const titleInput = safeGetElement('cheatsheetTitle');
+    const sectionsContainer = safeGetElement('sectionsContainer');
+    
+    if (!titleInput || !sectionsContainer) {
+        console.error('Required elements not found');
+        return null;
+    }
+
+    const title = titleInput.value.trim();
+    const sectionElements = sectionsContainer.querySelectorAll('.section-editor');
+
+    const sections = [];
+
+    sectionElements.forEach(sectionEl => {
+        const sectionTitleInput = sectionEl.querySelector('.section-title-input');
+        const sectionDescInput = sectionEl.querySelector('.section-description-input');
+        
+        const sectionTitle = sectionTitleInput ? sectionTitleInput.value.trim() : '';
+        const sectionDescription = sectionDescInput ? sectionDescInput.value.trim() : '';
+
+        // Collect all images from section (with percentage width)
+        const sectionImages = [];
+        const sectionImageAreas = sectionEl.querySelectorAll('.section-extra-fields .images-container .image-upload-area');
+        sectionImageAreas.forEach(area => {
+            const preview = area.querySelector('.image-preview');
+            const widthInput = area.querySelector('.image-width-input');
+            if (preview && preview.src && preview.src.startsWith('data:image')) {
+                const imageData = { src: preview.src };
+                if (widthInput && widthInput.value) {
+                    imageData.widthPercent = parseInt(widthInput.value);
+                }
+                sectionImages.push(imageData);
+            }
+        });
+
+        const lineElements = sectionEl.querySelectorAll(':scope > .section-editor-content > .code-lines-container > .code-line-editor');
+
+        const lines = [];
+        lineElements.forEach(lineEl => {
+            const lineType = lineEl.dataset.lineType || 'code';
+
+            if (lineType === 'text') {
+                const textInput = lineEl.querySelector('.text-input');
+                const text = textInput ? textInput.value.trim() : '';
+                if (text) {
+                    lines.push({ type: 'text', text: text });
+                }
+            } else {
+                const commandInput = lineEl.querySelector('.command-input');
+                const commentInput = lineEl.querySelector('.comment-input');
+                const command = commandInput ? commandInput.value.trim() : '';
+                const comment = commentInput ? commentInput.value.trim() : '';
+                if (command || comment) {
+                    lines.push({ type: 'code', command, comment });
+                }
+            }
+        });
+
+        // Collect subsections
+        const subsections = [];
+        const subsectionElements = sectionEl.querySelectorAll('.subsection-editor');
+        subsectionElements.forEach(subEl => {
+            const subTitleInput = subEl.querySelector('.subsection-title-input');
+            const subTitle = subTitleInput ? subTitleInput.value.trim() : '';
+
+            // Collect all images from subsection (with percentage width)
+            const subImages = [];
+            const subImageAreas = subEl.querySelectorAll('.images-container .image-upload-area');
+            subImageAreas.forEach(area => {
+                const preview = area.querySelector('.image-preview');
+                const widthInput = area.querySelector('.image-width-input');
+                if (preview && preview.src && preview.src.startsWith('data:image')) {
+                    const imageData = { src: preview.src };
+                    if (widthInput && widthInput.value) {
+                        imageData.widthPercent = parseInt(widthInput.value);
+                    }
+                    subImages.push(imageData);
+                }
+            });
+
+            const subLineElements = subEl.querySelectorAll('.code-line-editor');
+
+            const subLines = [];
+            subLineElements.forEach(lineEl => {
+                const lineType = lineEl.dataset.lineType || 'code';
+
+                if (lineType === 'text') {
+                    const textInput = lineEl.querySelector('.text-input');
+                    const text = textInput ? textInput.value.trim() : '';
+                    if (text) {
+                        subLines.push({ type: 'text', text: text });
+                    }
+                } else {
+                    const commandInput = lineEl.querySelector('.command-input');
+                    const commentInput = lineEl.querySelector('.comment-input');
+                    const command = commandInput ? commandInput.value.trim() : '';
+                    const comment = commentInput ? commentInput.value.trim() : '';
+                    if (command || comment) {
+                        subLines.push({ type: 'code', command, comment });
+                    }
+                }
+            });
+
+            if (subTitle || subLines.length > 0) {
+                const subsectionData = {
+                    title: subTitle,
+                    lines: subLines
+                };
+                // Only add images if there are any
+                if (subImages.length > 0) {
+                    subsectionData.images = subImages;
+                }
+                subsections.push(subsectionData);
+            }
+        });
+
+        if (sectionTitle || lines.length > 0 || subsections.length > 0) {
+            const sectionData = {
+                title: sectionTitle,
+                lines: lines
+            };
+            // Only add description if not empty
+            if (sectionDescription) {
+                sectionData.description = sectionDescription;
+            }
+            // Only add images if there are any
+            if (sectionImages.length > 0) {
+                sectionData.images = sectionImages;
+            }
+            // Only add subsections if there are any
+            if (subsections.length > 0) {
+                sectionData.subsections = subsections;
+            }
+            sections.push(sectionData);
+        }
+    });
+
+    return {
+        id: currentCheatsheet.id,
+        title: title || 'Untitled Cheatsheet',
+        sections: sections
+    };
+}
+
+/**
+ * Save the cheatsheet (auto-save without page reload)
+ */
+async function saveCheatsheet() {
+    const data = collectEditorData();
+    if (!data) {
+        showNotification('Error collecting cheatsheet data', 'error');
+        return;
+    }
+
+    if (data.sections.length === 0) {
+        alert('Please add at least one section with content.');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/cheatsheet', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            currentCheatsheet.id = result.id;
+            showNotification('Cheatsheet saved successfully!', 'success');
+            updateSidebarList(result.id, data.title);
+        } else {
+            showNotification('Error saving: ' + (result.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Error saving cheatsheet:', error);
+        showNotification('Error saving cheatsheet. Please try again.', 'error');
+    }
+}
+
+/**
+ * Show a notification message
+ */
+function showNotification(message, type = 'success') {
+    if (!message) return;
+
+    // Remove existing notification
+    const existing = document.querySelector('.notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        notification.classList.add('fade-out');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+/**
+ * Update sidebar list after save
+ */
+function updateSidebarList(id, title) {
+    if (!id || !title) return;
+
+    const list = safeGetElement('cheatsheetList');
+    if (!list) return;
+
+    let item = list.querySelector(`.cheatsheet-item[data-id="${id}"]`);
+
+    if (item) {
+        // Update existing item
+        const nameEl = item.querySelector('.cheatsheet-name');
+        if (nameEl) {
+            nameEl.textContent = title;
+            nameEl.title = title;
+        }
+    } else {
+        // Add new item
+        const li = document.createElement('li');
+        li.className = 'cheatsheet-item';
+        li.dataset.id = id;
+        
+        const escapedTitle = escapeHtml(title);
+        const escapedId = escapeHtml(id);
+        
+        li.innerHTML = `
+            <span class="cheatsheet-name" title="${escapedTitle}">${escapedTitle}</span>
+            <div class="cheatsheet-actions">
+                <button onclick="loadCheatsheet('${escapedId}')" title="Edit">✏️</button>
+                <button onclick="previewCheatsheet('${escapedId}')" title="Preview">👁️</button>
+                <button onclick="previewFullscreen('${escapedId}')" title="Open in new tab">🔳</button>
+                <button onclick="printToPdf('${escapedId}')" title="Print / PDF">🖨️</button>
+                <button onclick="downloadCheatsheet('${escapedId}')" title="Download HTML">⬇️</button>
+                <button onclick="downloadJsonCheatsheet('${escapedId}')" title="Download JSON">{ }</button>
+                <button onclick="deleteCheatsheet('${escapedId}')" title="Delete">🗑️</button>
+                <button onclick="moveToGroup('${escapedId}')" title="Move to Group">📁</button>
+            </div>
+        `;
+        list.insertBefore(li, list.firstChild);
+    }
+}
+
+/**
+ * Create a new cheatsheet
+ */
+function newCheatsheet() {
+    if (confirm('Start a new cheatsheet? Any unsaved changes will be lost.')) {
+        currentCheatsheet = { id: null, title: '', sections: [] };
+        
+        const titleInput = safeGetElement('cheatsheetTitle');
+        const container = safeGetElement('sectionsContainer');
+        
+        if (titleInput) titleInput.value = '';
+        if (container) container.innerHTML = '';
+        
+        addSection();
+    }
+}
+
+/**
+ * Load a cheatsheet for editing
+ */
+async function loadCheatsheet(id) {
+    if (!id) return;
+
+    try {
+        const response = await fetch(`/api/cheatsheet/${encodeURIComponent(id)}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.error) {
+            alert('Error loading cheatsheet: ' + data.error);
+            return;
+        }
+
+        loadCheatsheetData(data);
+    } catch (error) {
+        console.error('Error loading cheatsheet:', error);
+        alert('Error loading cheatsheet. Please try again.');
+    }
+}
+
+/**
+ * Preview a cheatsheet in modal
+ */
+function previewCheatsheet(id) {
+    if (!id) return;
+
+    const modal = safeGetElement('previewModal');
+    const iframe = safeGetElement('previewFrame');
+
+    if (!modal || !iframe) return;
+
+    iframe.src = `/preview/${encodeURIComponent(id)}`;
+    modal.classList.add('active');
+}
+
+/**
+ * Preview a cheatsheet in a new tab (fullscreen)
+ */
+function previewFullscreen(id) {
+    if (!id) return;
+    window.open(`/preview/${encodeURIComponent(id)}`, '_blank');
+}
+
+/**
+ * Preview the current cheatsheet (unsaved)
+ */
+async function previewCurrent() {
+    const data = collectEditorData();
+    if (!data) {
+        showNotification('Error collecting cheatsheet data', 'error');
+        return;
+    }
+
+    if (data.sections.length === 0) {
+        alert('Please add at least one section with content to preview.');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/cheatsheet', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            currentCheatsheet.id = result.id;
+            previewCheatsheet(result.id);
+        } else {
+            alert('Error generating preview: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error generating preview:', error);
+        alert('Error generating preview. Please try again.');
+    }
+}
+
+/**
+ * Close the preview modal
+ */
+function closePreview() {
+    const modal = safeGetElement('previewModal');
+    const iframe = safeGetElement('previewFrame');
+
+    if (modal) modal.classList.remove('active');
+    if (iframe) iframe.src = '';
+}
+
+/**
+ * Download a cheatsheet as HTML
+ */
+function downloadCheatsheet(id) {
+    if (!id) return;
+    window.location.href = `/download/${encodeURIComponent(id)}`;
+}
+
+/**
+ * Download a cheatsheet as JSON
+ */
+function downloadJsonCheatsheet(id) {
+    if (!id) return;
+    window.location.href = `/download-json/${encodeURIComponent(id)}`;
+}
+
+/**
+ * Delete a cheatsheet
+ */
+async function deleteCheatsheet(id) {
+    if (!id) return;
+
+    if (!confirm('Are you sure you want to delete this cheatsheet?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/cheatsheet/${encodeURIComponent(id)}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Remove from list
+            const item = document.querySelector(`.cheatsheet-item[data-id="${id}"]`);
+            if (item) {
+                item.remove();
+            }
+
+            // If we're editing this cheatsheet, start a new one
+            if (currentCheatsheet.id === id) {
+                newCheatsheet();
+            }
+            
+            showNotification('Cheatsheet deleted successfully', 'success');
+        } else {
+            alert('Error deleting cheatsheet: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error deleting cheatsheet:', error);
+        alert('Error deleting cheatsheet. Please try again.');
+    }
+}
+
+/**
+ * Toggle sidebar expanded/collapsed
+ */
+function toggleSidebar() {
+    const sidebar = safeGetElement('sidebar');
+    if (!sidebar) return;
+
+    sidebar.classList.toggle('collapsed');
+
+    // Save state to localStorage
+    try {
+        localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    } catch (error) {
+        console.error('Error saving sidebar state:', error);
+    }
+}
+
+/**
+ * Toggle section navigator panel
+ */
+function toggleNavigator() {
+    const navigator = safeGetElement('sectionNavigator');
+    if (!navigator) return;
+
+    navigator.classList.toggle('active');
+
+    if (navigator.classList.contains('active')) {
+        updateNavigator();
+    }
+}
+
+/**
+ * Update the section navigator list
+ */
+function updateNavigator() {
+    const navList = safeGetElement('navList');
+    if (!navList) return;
+
+    const sections = document.querySelectorAll('.section-editor');
+
+    navList.innerHTML = '';
+
+    sections.forEach((section, index) => {
+        const sectionNum = index + 1;
+        const titleInput = section.querySelector('.section-title-input');
+        const title = titleInput ? titleInput.value || `Section ${sectionNum}` : `Section ${sectionNum}`;
+        const subsections = section.querySelectorAll('.subsection-editor');
+        const hasSubsections = subsections.length > 0;
+
+        // Create section item
+        const li = document.createElement('li');
+        li.className = 'nav-section' + (hasSubsections ? ' has-subsections' : '');
+        li.dataset.sectionIndex = index;
+
+        // Add minimalist toggle button if has subsections (default collapsed)
+        const toggleBtn = hasSubsections ? `<button class="nav-toggle" onclick="event.stopPropagation(); toggleNavSection(this)">+</button>` : '';
+
+        li.innerHTML = `${toggleBtn}<span class="nav-num">${sectionNum}</span><span class="nav-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>`;
+        li.onclick = () => scrollToSection(index);
+        navList.appendChild(li);
+
+        // Add subsections container (collapsed by default)
+        if (hasSubsections) {
+            const subContainer = document.createElement('ul');
+            subContainer.className = 'nav-subsections collapsed';
+
+            subsections.forEach((subsection, subIndex) => {
+                const subNum = `${sectionNum}.${subIndex + 1}`;
+                const subTitleInput = subsection.querySelector('.subsection-title-input');
+                const subTitle = subTitleInput ? subTitleInput.value || `Subsection ${subNum}` : `Subsection ${subNum}`;
+                const subLi = document.createElement('li');
+                subLi.className = 'nav-subsection';
+                subLi.innerHTML = `<span class="nav-num">${subNum}</span><span class="nav-title" title="${escapeHtml(subTitle)}">${escapeHtml(subTitle)}</span>`;
+                subLi.onclick = (e) => { e.stopPropagation(); scrollToSubsection(index, subIndex); };
+                subContainer.appendChild(subLi);
+            });
+
+            navList.appendChild(subContainer);
+        }
+    });
+}
+
+/**
+ * Toggle a section's subsections in the navigator
+ */
+function toggleNavSection(button) {
+    if (!validateButton(button)) return;
+
+    const sectionLi = button.closest('.nav-section');
+    if (!sectionLi) return;
+
+    const subContainer = sectionLi.nextElementSibling;
+
+    if (subContainer && subContainer.classList.contains('nav-subsections')) {
+        subContainer.classList.toggle('collapsed');
+        button.textContent = subContainer.classList.contains('collapsed') ? '+' : '−';
+    }
+}
+
+/**
+ * Scroll to a section in the editor
+ */
+function scrollToSection(index) {
+    const sections = document.querySelectorAll('.section-editor');
+    if (sections[index]) {
+        // Unfold the section if it's collapsed
+        sections[index].classList.remove('collapsed');
+        sections[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const titleInput = sections[index].querySelector('.section-title-input');
+        if (titleInput) {
+            titleInput.focus();
+        }
+    }
+}
+
+/**
+ * Scroll to a subsection in the editor
+ */
+function scrollToSubsection(sectionIndex, subsectionIndex) {
+    const sections = document.querySelectorAll('.section-editor');
+    if (sections[sectionIndex]) {
+        // Unfold the parent section if it's collapsed
+        sections[sectionIndex].classList.remove('collapsed');
+        const subsections = sections[sectionIndex].querySelectorAll('.subsection-editor');
+        if (subsections[subsectionIndex]) {
+            // Unfold the subsection if it's collapsed
+            subsections[subsectionIndex].classList.remove('collapsed');
+            subsections[subsectionIndex].scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const titleInput = subsections[subsectionIndex].querySelector('.subsection-title-input');
+            if (titleInput) {
+                titleInput.focus();
+            }
+        }
+    }
+}
+
+/**
+ * Save current state to history (debounced)
+ */
+function saveToHistory() {
+    if (isUndoRedoAction) return;
+
+    if (saveHistoryTimeout) {
+        clearTimeout(saveHistoryTimeout);
+    }
+    
+    saveHistoryTimeout = setTimeout(() => {
+        const state = collectEditorData();
+        if (!state) return;
+
+        const stateStr = JSON.stringify(state);
+
+        // Don't save if same as last state
+        if (historyStack.length > 0 && JSON.stringify(historyStack[historyStack.length - 1]) === stateStr) {
+            return;
+        }
+
+        historyStack.push(state);
+        if (historyStack.length > MAX_HISTORY) {
+            historyStack.shift();
+        }
+
+        // Clear redo stack on new change
+        redoStack.length = 0;
+
+        updateUndoRedoButtons();
+    }, 300);
+}
+
+/**
+ * Undo last change
+ */
+function undo() {
+    if (historyStack.length <= 1) return;
+
+    isUndoRedoAction = true;
+
+    try {
+        // Save current state to redo stack
+        const currentState = collectEditorData();
+        if (currentState) {
+            redoStack.push(currentState);
+        }
+
+        // Pop current state and restore previous
+        historyStack.pop();
+        const previousState = historyStack[historyStack.length - 1];
+
+        if (previousState) {
+            loadCheatsheetData(previousState);
+        }
+
+        updateUndoRedoButtons();
+    } finally {
+        isUndoRedoAction = false;
+    }
+}
+
+/**
+ * Redo last undone change
+ */
+function redo() {
+    if (redoStack.length === 0) return;
+
+    isUndoRedoAction = true;
+
+    try {
+        const nextState = redoStack.pop();
+        if (nextState) {
+            historyStack.push(nextState);
+            loadCheatsheetData(nextState);
+        }
+
+        updateUndoRedoButtons();
+    } finally {
+        isUndoRedoAction = false;
+    }
+}
+
+/**
+ * Update undo/redo button states
+ */
+function updateUndoRedoButtons() {
+    const undoBtn = document.querySelector('.btn-undo');
+    const redoBtn = document.querySelector('.btn-redo');
+
+    if (undoBtn) {
+        undoBtn.disabled = historyStack.length <= 1;
+    }
+    if (redoBtn) {
+        redoBtn.disabled = redoStack.length === 0;
+    }
+}
+
+/**
+ * Toggle a section collapsed/expanded in the editor
+ */
+function toggleSectionEditor(button) {
+    if (!validateButton(button)) return;
+
+    const section = button.closest('.section-editor');
+    if (section) {
+        section.classList.toggle('collapsed');
+    }
+}
+
+/**
+ * Toggle a subsection collapsed/expanded in the editor
+ */
+function toggleSubsectionEditor(button) {
+    if (!validateButton(button)) return;
+
+    const subsection = button.closest('.subsection-editor');
+    if (subsection) {
+        subsection.classList.toggle('collapsed');
+    }
+}
+
+/**
+ * Fold all sections in the editor
+ */
+function foldAllSections() {
+    document.querySelectorAll('.section-editor').forEach(section => {
+        section.classList.add('collapsed');
+    });
+}
+
+/**
+ * Unfold all sections in the editor
+ */
+function unfoldAllSections() {
+    document.querySelectorAll('.section-editor').forEach(section => {
+        section.classList.remove('collapsed');
+    });
+}
+
+/**
+ * Open print dialog for a cheatsheet (for PDF export)
+ */
+function printToPdf(id) {
+    if (!id) return;
+
+    const printWindow = window.open(`/preview/${encodeURIComponent(id)}`, '_blank');
+    if (printWindow) {
+        printWindow.onload = function() {
+            setTimeout(() => {
+                printWindow.print();
+            }, 500);
+        };
+    }
+}
+
+// ==============================================
+// DRAG AND DROP FUNCTIONALITY
+// ==============================================
+
+let draggedElement = null;
+let draggedType = null;
+
+/**
+ * Initialize drag and drop for an element
+ */
+function initDragDrop(element, type) {
+    if (!element || !type) return;
+
+    element.setAttribute('draggable', 'true');
+    element.classList.add('draggable');
+
+    element.addEventListener('dragstart', (e) => {
+        draggedElement = element;
+        draggedType = type;
+        element.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', '');
+    });
+
+    element.addEventListener('dragend', () => {
+        element.classList.remove('dragging');
+        document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        draggedElement = null;
+        draggedType = null;
+    });
+
+    element.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!draggedElement || draggedElement === element) return;
+
+        // Only allow dropping on same type containers
+        const draggedParent = draggedElement.parentElement;
+        const targetParent = element.parentElement;
+        if (draggedParent !== targetParent) return;
+
+        element.classList.add('drag-over');
+    });
+
+    element.addEventListener('dragleave', () => {
+        element.classList.remove('drag-over');
+    });
+
+    element.addEventListener('drop', (e) => {
+        e.preventDefault();
+        element.classList.remove('drag-over');
+
+        if (!draggedElement || draggedElement === element) return;
+
+        const parent = element.parentElement;
+        const draggedParent = draggedElement.parentElement;
+        if (parent !== draggedParent) return;
+
+        // Get positions
+        const children = Array.from(parent.children).filter(c => c.classList.contains(draggedType));
+        const draggedIndex = children.indexOf(draggedElement);
+        const targetIndex = children.indexOf(element);
+
+        if (draggedIndex === -1 || targetIndex === -1) return;
+
+        if (draggedIndex < targetIndex) {
+            parent.insertBefore(draggedElement, element.nextSibling);
+        } else {
+            parent.insertBefore(draggedElement, element);
+        }
+
+        // Update numbers and save history
+        if (draggedType === 'section-editor') {
+            updateSectionNumbers();
+        } else if (draggedType === 'subsection-editor') {
+            updateSubsectionNumbers(parent.closest('.section-editor'));
+        }
+        saveToHistory();
+    });
+}
+
+/**
+ * Setup drag and drop on page load and when elements are created
+ */
+function setupDragAndDrop() {
+    // Sections
+    document.querySelectorAll('.section-editor').forEach(el => {
+        if (!el.hasAttribute('draggable')) {
+            initDragDrop(el, 'section-editor');
+        }
+    });
+
+    // Subsections
+    document.querySelectorAll('.subsection-editor').forEach(el => {
+        if (!el.hasAttribute('draggable')) {
+            initDragDrop(el, 'subsection-editor');
+        }
+    });
+
+    // Code lines
+    document.querySelectorAll('.code-line-editor').forEach(el => {
+        if (!el.hasAttribute('draggable')) {
+            initDragDrop(el, 'code-line-editor');
+        }
+    });
+}
+
+/**
+ * Initialize drag and drop observer
+ */
+function initDragObserver() {
+    const container = safeGetElement('sectionsContainer');
+    if (!container) return;
+
+    // Clean up existing observer
+    if (dragObserver) {
+        dragObserver.disconnect();
+    }
+
+    dragObserver = new MutationObserver(() => {
+        setupDragAndDrop();
+    });
+
+    dragObserver.observe(container, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// Initialize drag observer on load
+document.addEventListener('DOMContentLoaded', () => {
+    initDragObserver();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (dragObserver) {
+        dragObserver.disconnect();
+    }
+    if (saveHistoryTimeout) {
+        clearTimeout(saveHistoryTimeout);
+    }
+});
+
+// ==============================================
+// INSERT BETWEEN FUNCTIONALITY
+// ==============================================
+
+/**
+ * Insert a new section before another section
+ */
+function insertSectionBefore(button) {
+    if (!validateButton(button)) return;
+
+    const targetSection = button.closest('.section-editor');
+    if (!targetSection) return;
+
+    const container = safeGetElement('sectionsContainer');
+    if (!container) return;
+
+    const sectionCount = container.children.length + 1;
+
+    // New sections are expanded so user can edit them
+    const newSection = createSectionElement(sectionCount, false);
+    if (!newSection) return;
+
+    const linesContainer = newSection.querySelector('.code-lines-container');
+    if (linesContainer) {
+        const codeLine = createCodeLineElement();
+        if (codeLine) {
+            linesContainer.appendChild(codeLine);
+        }
+    }
+
+    container.insertBefore(newSection, targetSection);
+    initDragDrop(newSection, 'section-editor');
+    updateSectionNumbers();
+    
+    const titleInput = newSection.querySelector('.section-title-input');
+    if (titleInput) {
+        titleInput.focus();
+    }
+    
+    saveToHistory();
+}
+
+/**
+ * Insert a new subsection before another subsection
+ */
+function insertSubsectionBefore(button) {
+    if (!validateButton(button)) return;
+
+    const targetSubsection = button.closest('.subsection-editor');
+    if (!targetSubsection) return;
+
+    const section = targetSubsection.closest('.section-editor');
+    if (!section) return;
+
+    const sectionNum = parseInt(section.dataset.sectionIndex);
+    const subsectionsContainer = section.querySelector('.subsections-container');
+    if (!subsectionsContainer) return;
+
+    const subsectionCount = subsectionsContainer.children.length + 1;
+
+    // New subsections are expanded so user can edit them
+    const newSubsection = createSubsectionElement(sectionNum, subsectionCount, false);
+    if (!newSubsection) return;
+
+    const linesContainer = newSubsection.querySelector('.code-lines-container');
+    if (linesContainer) {
+        const codeLine = createCodeLineElement();
+        if (codeLine) {
+            linesContainer.appendChild(codeLine);
+        }
+    }
+
+    subsectionsContainer.insertBefore(newSubsection, targetSubsection);
+    initDragDrop(newSubsection, 'subsection-editor');
+    updateSubsectionNumbers(section);
+    
+    const titleInput = newSubsection.querySelector('.subsection-title-input');
+    if (titleInput) {
+        titleInput.focus();
+    }
+    
+    saveToHistory();
+}
+
+/**
+ * Insert a new code line before another code line
+ */
+function insertCodeLineBefore(button) {
+    if (!validateButton(button)) return;
+
+    const targetLine = button.closest('.code-line-editor');
+    if (!targetLine) return;
+
+    const container = targetLine.closest('.code-lines-container');
+    if (!container) return;
+
+    const newLine = createCodeLineElement();
+    if (!newLine) return;
+
+    container.insertBefore(newLine, targetLine);
+    initDragDrop(newLine, 'code-line-editor');
+    
+    const commandInput = newLine.querySelector('.command-input');
+    if (commandInput) {
+        commandInput.focus();
+    }
+    
+    saveToHistory();
+}
+
+// ==============================================
+// GROUPS FUNCTIONALITY
+// ==============================================
+
+let currentMoveCheatsheetId = null;
+
+/**
+ * Toggle group collapsed/expanded
+ */
+function toggleGroup(header) {
+    if (!header) return;
+
+    const groupSection = header.closest('.group-section');
+    if (groupSection) {
+        groupSection.classList.toggle('collapsed');
+    }
+}
+
+/**
+ * Show create group modal
+ */
+function showCreateGroupModal() {
+    const modal = safeGetElement('createGroupModal');
+    const nameInput = safeGetElement('groupName');
+    
+    if (modal) modal.classList.add('active');
+    if (nameInput) nameInput.focus();
+}
+
+/**
+ * Close create group modal
+ */
+function closeCreateGroupModal() {
+    const modal = safeGetElement('createGroupModal');
+    const nameInput = safeGetElement('groupName');
+    const colorInput = safeGetElement('groupColor');
+    const colorPreview = safeGetElement('colorPreview');
+    
+    if (modal) modal.classList.remove('active');
+    if (nameInput) nameInput.value = '';
+    if (colorInput) colorInput.value = '#667eea';
+    if (colorPreview) colorPreview.style.background = '#667eea';
+}
+
+/**
+ * Create a new group
+ */
+async function createGroup() {
+    const nameInput = safeGetElement('groupName');
+    const colorInput = safeGetElement('groupColor');
+    
+    if (!nameInput || !colorInput) return;
+
+    const name = nameInput.value.trim();
+    const color = colorInput.value;
+
+    if (!name) {
+        alert('Please enter a group name.');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/groups', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, color })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeCreateGroupModal();
+            location.reload();
+        } else {
+            alert('Error creating group: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error creating group:', error);
+        alert('Error creating group. Please try again.');
+    }
+}
+
+/**
+ * Delete a group
+ */
+async function deleteGroup(groupId) {
+    if (!groupId) return;
+
+    if (!confirm('Are you sure you want to delete this group? Cheatsheets will be moved to Ungrouped.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/groups/${encodeURIComponent(groupId)}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Error deleting group: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error deleting group:', error);
+        alert('Error deleting group. Please try again.');
+    }
+}
+
+/**
+ * Show move to group modal
+ */
+function moveToGroup(cheatsheetId) {
+    if (!cheatsheetId) return;
+
+    currentMoveCheatsheetId = cheatsheetId;
+    const modal = safeGetElement('moveToGroupModal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+/**
+ * Close move to group modal
+ */
+function closeMoveToGroupModal() {
+    const modal = safeGetElement('moveToGroupModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    currentMoveCheatsheetId = null;
+}
+
+/**
+ * Confirm move cheatsheet to group
+ */
+async function confirmMoveToGroup() {
+    if (!currentMoveCheatsheetId) return;
+
+    const groupSelect = safeGetElement('groupSelect');
+    if (!groupSelect) return;
+
+    const groupId = groupSelect.value;
+
+    try {
+        const response = await fetch(`/api/cheatsheet/${encodeURIComponent(currentMoveCheatsheetId)}/group`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ group: groupId })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeMoveToGroupModal();
+            location.reload();
+        } else {
+            alert('Error moving cheatsheet: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error moving cheatsheet:', error);
+        alert('Error moving cheatsheet. Please try again.');
+    }
+}
