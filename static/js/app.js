@@ -300,6 +300,7 @@ function loadImageToContainer(container, imageData) {
     const preview = imageUpload.querySelector('.image-preview');
     const label = imageUpload.querySelector('.image-label');
     const widthInput = imageUpload.querySelector('.image-width-input');
+    const widthSlider = imageUpload.querySelector('.image-width-slider');
     const fileInput = imageUpload.querySelector('.image-input');
 
     if (!preview || !previewContainer || !label || !fileInput) return;
@@ -309,8 +310,9 @@ function loadImageToContainer(container, imageData) {
         preview.src = imageData;
     } else {
         preview.src = imageData.src;
-        if (widthInput && imageData.widthPercent) {
-            widthInput.value = imageData.widthPercent;
+        if (imageData.widthPercent) {
+            if (widthInput) widthInput.value = imageData.widthPercent;
+            if (widthSlider) widthSlider.value = imageData.widthPercent;
         }
     }
     previewContainer.style.display = 'block';
@@ -833,6 +835,26 @@ function removeImage(button) {
     if (input) {
         input.value = '';
         input.style.display = 'block';
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Sync image size between slider and number input
+ */
+function syncImageSize(element, source) {
+    const uploadArea = element.closest('.image-upload-area');
+    if (!uploadArea) return;
+
+    const slider = uploadArea.querySelector('.image-width-slider');
+    const input = uploadArea.querySelector('.image-width-input');
+
+    if (source === 'slider' && slider && input) {
+        input.value = slider.value;
+    } else if (source === 'input' && slider && input) {
+        slider.value = input.value;
     }
 
     // Save to history for undo/redo

@@ -709,19 +709,23 @@ def generate_html(title, sections):
             font-size: 0.9rem;
         }}
 
-        /* Section Image Styles */
+        /* Section Image Styles - Stack vertically */
         .section-image-container,
         .subsection-image-container {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
             margin-bottom: 15px;
-            text-align: center;
         }}
 
         .section-image,
         .subsection-image {{
             max-width: 100%;
-            max-height: 400px;
+            height: auto;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            object-fit: contain;
         }}
 
         /* Subsections Grid Container - Left to Right Flow */
@@ -743,12 +747,14 @@ def generate_html(title, sections):
             border-left: 4px solid #667eea;
             background: #fafbfc;
             border-radius: 8px;
+            overflow: hidden;
         }}
 
-        /* Allow subsection to grow with image */
-        .subsection-image-container {{
-            display: flex;
-            justify-content: center;
+        /* Subsection images constrained to container */
+        .subsection .subsection-image-container {{
+            width: 100%;
+            padding: 0 10px;
+            box-sizing: border-box;
         }}
 
         .subsection-image {{
@@ -1059,12 +1065,19 @@ def generate_html(title, sections):
             .section-image-container,
             .subsection-image-container {{
                 margin: 2px 0 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                gap: 4px !important;
             }}
 
             .section-image,
             .subsection-image {{
-                max-height: 80px !important;
-                max-width: 40% !important;
+                max-height: 120px !important;
+                height: auto !important;
+                object-fit: contain !important;
+                border-radius: 4px !important;
+                box-shadow: none !important;
             }}
         }}
 
