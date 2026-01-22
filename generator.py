@@ -1220,6 +1220,20 @@ def generate_html(title, sections):
                 collapseAll();
             }}
         }});
+
+        // Initialize: collapse all sections, keep index expanded
+        document.addEventListener('DOMContentLoaded', function() {{
+            // Collapse all sections
+            document.querySelectorAll('.section').forEach(section => {{
+                section.classList.add('collapsed');
+            }});
+            // Collapse all subsections
+            document.querySelectorAll('.subsection').forEach(subsection => {{
+                subsection.classList.add('collapsed');
+            }});
+            // Keep index expanded (do not add collapsed class)
+            // Index is expanded by default since we don't add 'collapsed' class
+        }});
     </script>
 </body>
 </html>'''
