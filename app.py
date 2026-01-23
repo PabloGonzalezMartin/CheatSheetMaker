@@ -772,26 +772,23 @@ def generate_html(data):
             object-fit: contain;
         }}
 
-        /* Subsections Grid Container - Left to Right Flow */
         .subsections-grid {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
+            column-count: 3;           /* 3 columnas */
+            column-gap: 15px;          /* Espacio entre columnas */
             margin: 15px 0;
-            align-items: stretch;
         }}
 
-        /* Subsection Styles - Adapt to content */
         .subsection {{
-            flex: 0 1 auto;
-            min-width: 200px;
-            max-width: 100%;
-            margin: 0;
+            break-inside: avoid;       /* No dividir entre columnas */
+            display: inline-block;     /* Importante para column-count */
+            width: 100%;               /* Ocupa ancho completo de la columna */
+            margin-bottom: 15px;       /* Espacio vertical entre elementos */
             border: 1px solid #e0e0e0;
             border-left: 4px solid #667eea;
             background: #fafbfc;
             border-radius: 8px;
             overflow: hidden;
+            page-break-inside: avoid;  /* Para compatibilidad */
         }}
 
         /* Subsection images constrained to container */
