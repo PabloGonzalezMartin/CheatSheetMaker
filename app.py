@@ -983,8 +983,7 @@ def generate_html(data):
 
             /* CSS Grid layout - 2 columns, fills space naturally */
             .subsections-grid {{
-                display: grid !important;
-                grid-template-columns: 1fr 1fr !important;
+                column-count: 2 !important;
                 gap: 4px !important;
                 break-inside: auto !important;
                 page-break-inside: auto !important;
