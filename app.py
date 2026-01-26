@@ -442,9 +442,16 @@ def generate_html(data):
                         </div>
                     </div>'''
 
-        # Close the subsections grid container
+        # Close the subsections grid container and add toggle buttons
         if subsections_list:
             subsections_html += '\n                </div>'
+            # Add minimalist subsection toggle buttons before the grid
+            subsections_toggle_html = f'''
+                <div class="subsections-controls">
+                    <button class="subsections-toggle-btn" onclick="expandAllSubsections({section_num})" title="Expand all subsections">+</button>
+                    <button class="subsections-toggle-btn" onclick="collapseAllSubsections({section_num})" title="Collapse all subsections">−</button>
+                </div>'''
+            subsections_html = subsections_toggle_html + subsections_html
 
         sections_html += f'''
         <div class="section section-{section_num}" id="section-{section_num}" data-section="{section_num}">
@@ -899,6 +906,41 @@ def generate_html(data):
             object-fit: contain;
         }}
 
+        /* Subsection toggle controls */
+        .subsections-controls {{
+            display: flex;
+            justify-content: flex-start;
+            gap: 4px;
+            margin-bottom: 8px;
+        }}
+
+        .subsections-toggle-btn {{
+            width: 24px;
+            height: 24px;
+            border: 1px solid #f5c6a0;
+            border-radius: 4px;
+            background: #fff5eb;
+            color: #d97706;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+            line-height: 1;
+        }}
+
+        .subsections-toggle-btn:hover {{
+            background: #fed7aa;
+            border-color: #fb923c;
+            color: #c2410c;
+        }}
+
+        .subsections-toggle-btn:active {{
+            transform: scale(0.95);
+        }}
+
         .subsections-grid {{
             column-count: 3;           /* 3 columnas */
             column-gap: 15px;          /* Espacio entre columnas */
@@ -1027,7 +1069,7 @@ def generate_html(data):
                 font-size: 1.1rem !important;
             }}
 
-            .controls, .toggle-icon, .copy-btn, .copy-line-btn, .section-header-right {{
+            .controls, .toggle-icon, .copy-btn, .copy-line-btn, .section-header-right, .subsections-controls {{
                 display: none !important;
             }}
 
@@ -1316,6 +1358,24 @@ def generate_html(data):
             }});
             const indexSection = document.querySelector('.index-section');
             if (indexSection) indexSection.classList.add('collapsed');
+        }}
+
+        function expandAllSubsections(sectionNum) {{
+            const section = document.getElementById('section-' + sectionNum);
+            if (section) {{
+                section.querySelectorAll('.subsection').forEach(sub => {{
+                    sub.classList.remove('collapsed');
+                }});
+            }}
+        }}
+
+        function collapseAllSubsections(sectionNum) {{
+            const section = document.getElementById('section-' + sectionNum);
+            if (section) {{
+                section.querySelectorAll('.subsection').forEach(sub => {{
+                    sub.classList.add('collapsed');
+                }});
+            }}
         }}
 
         function printCheatsheet() {{
