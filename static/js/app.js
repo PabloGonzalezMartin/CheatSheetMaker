@@ -768,7 +768,36 @@ function setLineType(button, type) {
 }
 
 /**
- * Handle image upload and convert to base64
+ * Get or generate a temporary cheatsheet ID for image uploads
+ */
+function getCheatsheetIdForUpload() {
+    // If we have an existing ID, use it
+    if (currentCheatsheet.id) {
+        return currentCheatsheet.id;
+    }
+
+    // Generate a temporary ID based on the title or a random string
+    const titleInput = safeGetElement('cheatsheetTitle');
+    const title = titleInput ? titleInput.value.trim() : '';
+
+    if (title) {
+        // Generate ID similar to backend logic
+        const cleanTitle = title.toLowerCase()
+            .replace(/[^a-zA-Z0-9\s_-]/g, '')
+            .replace(/\s+/g, '_')
+            .substring(0, 30);
+        const hash = Math.random().toString(36).substring(2, 8);
+        currentCheatsheet.id = cleanTitle ? `${cleanTitle}_${hash}` : hash;
+    } else {
+        // Generate a completely random ID
+        currentCheatsheet.id = 'temp_' + Math.random().toString(36).substring(2, 10);
+    }
+
+    return currentCheatsheet.id;
+}
+
+/**
+ * Handle image upload - uploads to server and shows preview
  */
 function handleImageUpload(input) {
     if (!input || !input.files) return;
@@ -788,31 +817,51 @@ function handleImageUpload(input) {
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const uploadArea = input.closest('.image-upload-area');
-        if (!uploadArea) return;
+    const uploadArea = input.closest('.image-upload-area');
+    if (!uploadArea) return;
 
-        const previewContainer = uploadArea.querySelector('.image-preview-container');
-        const preview = uploadArea.querySelector('.image-preview');
-        const label = uploadArea.querySelector('.image-label');
+    const previewContainer = uploadArea.querySelector('.image-preview-container');
+    const preview = uploadArea.querySelector('.image-preview');
+    const label = uploadArea.querySelector('.image-label');
 
-        if (!preview || !previewContainer || !label) return;
+    if (!preview || !previewContainer || !label) return;
 
-        preview.src = e.target.result;
-        previewContainer.style.display = 'block';
-        label.style.display = 'none';
-        input.style.display = 'none';
+    // Show loading state
+    label.textContent = 'Uploading...';
 
-        // Save to history for undo/redo
-        saveToHistory();
-    };
-    
-    reader.onerror = function() {
-        alert('Error reading image file. Please try again.');
-    };
-    
-    reader.readAsDataURL(file);
+    // Get or generate cheatsheet ID
+    const cheatsheetId = getCheatsheetIdForUpload();
+
+    // Upload to server
+    const formData = new FormData();
+    formData.append('file', file);
+
+    fetch(`/api/cheatsheet/${cheatsheetId}/image`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.url) {
+            // Set the image URL (not base64)
+            preview.src = data.url;
+            preview.dataset.imageUrl = data.url;  // Store URL in data attribute
+            previewContainer.style.display = 'block';
+            label.style.display = 'none';
+            input.style.display = 'none';
+
+            // Save to history for undo/redo
+            saveToHistory();
+        } else {
+            throw new Error(data.error || 'Upload failed');
+        }
+    })
+    .catch(error => {
+        console.error('Image upload error:', error);
+        alert('Error uploading image: ' + error.message);
+        label.textContent = 'Click or drag to upload image';
+        label.style.display = 'block';
+    });
 }
 
 /**
@@ -891,8 +940,16 @@ function collectEditorData() {
         sectionImageAreas.forEach(area => {
             const preview = area.querySelector('.image-preview');
             const widthInput = area.querySelector('.image-width-input');
-            if (preview && preview.src && preview.src.startsWith('data:image')) {
-                const imageData = { src: preview.src };
+            // Accept both base64 (data:image) and server URLs (/images/)
+            if (preview && preview.src && (preview.src.startsWith('data:image') || preview.src.includes('/images/'))) {
+                // Use the URL path for server images, or full src for base64
+                let imageSrc = preview.src;
+                if (preview.src.includes('/images/')) {
+                    // Extract the path from full URL (e.g., http://localhost:5000/images/... -> /images/...)
+                    const url = new URL(preview.src);
+                    imageSrc = url.pathname;
+                }
+                const imageData = { src: imageSrc };
                 if (widthInput && widthInput.value) {
                     imageData.widthPercent = parseInt(widthInput.value);
                 }
@@ -936,8 +993,16 @@ function collectEditorData() {
             subImageAreas.forEach(area => {
                 const preview = area.querySelector('.image-preview');
                 const widthInput = area.querySelector('.image-width-input');
-                if (preview && preview.src && preview.src.startsWith('data:image')) {
-                    const imageData = { src: preview.src };
+                // Accept both base64 (data:image) and server URLs (/images/)
+                if (preview && preview.src && (preview.src.startsWith('data:image') || preview.src.includes('/images/'))) {
+                    // Use the URL path for server images, or full src for base64
+                    let imageSrc = preview.src;
+                    if (preview.src.includes('/images/')) {
+                        // Extract the path from full URL
+                        const url = new URL(preview.src);
+                        imageSrc = url.pathname;
+                    }
+                    const imageData = { src: imageSrc };
                     if (widthInput && widthInput.value) {
                         imageData.widthPercent = parseInt(widthInput.value);
                     }

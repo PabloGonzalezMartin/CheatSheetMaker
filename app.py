@@ -8,8 +8,11 @@ import re
 import json
 import uuid
 import hashlib
+import base64
+import shutil
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, send_from_directory
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -17,11 +20,16 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 CHEATSHEETS_DIR = os.path.join(BASE_DIR, 'cheatsheets')
+IMAGES_DIR = os.path.join(BASE_DIR, 'images')
 GROUPS_FILE = os.path.join(DATA_DIR, '_groups.json')
+
+# Allowed image extensions
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
 
 # Ensure directories exist
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(CHEATSHEETS_DIR, exist_ok=True)
+os.makedirs(IMAGES_DIR, exist_ok=True)
 PDF_DIR = os.path.join(BASE_DIR, 'pdf')
 os.makedirs(PDF_DIR, exist_ok=True)
 
@@ -37,6 +45,76 @@ def generate_cheatsheet_id(title):
     hash_str = hashlib.md5(title.encode()).hexdigest()[:6]
 
     return f"{clean_title}_{hash_str}" if clean_title else hash_str
+
+
+def allowed_image_file(filename):
+    """Check if the file has an allowed image extension."""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+
+
+def get_cheatsheet_images_dir(cheatsheet_id):
+    """Get the path to a cheatsheet's images directory."""
+    return os.path.join(IMAGES_DIR, cheatsheet_id)
+
+
+def ensure_cheatsheet_images_dir(cheatsheet_id):
+    """Ensure the images directory for a cheatsheet exists."""
+    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
+    os.makedirs(images_dir, exist_ok=True)
+    return images_dir
+
+
+def generate_image_filename(original_filename, section_idx=None, subsection_idx=None, image_idx=0):
+    """Generate a unique filename for an uploaded image."""
+    ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else 'png'
+
+    if subsection_idx is not None:
+        prefix = f"section_{section_idx}_subsection_{subsection_idx}_img_{image_idx}"
+    elif section_idx is not None:
+        prefix = f"section_{section_idx}_img_{image_idx}"
+    else:
+        # Generate unique name with timestamp and random hash
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        random_hash = hashlib.md5(os.urandom(16)).hexdigest()[:6]
+        prefix = f"img_{timestamp}_{random_hash}"
+
+    return f"{prefix}.{ext}"
+
+
+def delete_cheatsheet_images(cheatsheet_id):
+    """Delete all images for a cheatsheet."""
+    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
+    if os.path.exists(images_dir):
+        shutil.rmtree(images_dir)
+
+
+def save_base64_image(base64_data, cheatsheet_id, filename):
+    """Save a base64 encoded image to file and return the URL path."""
+    # Extract the actual base64 data (remove data:image/xxx;base64, prefix)
+    if ',' in base64_data:
+        base64_data = base64_data.split(',', 1)[1]
+
+    # Decode and save
+    image_data = base64.b64decode(base64_data)
+    images_dir = ensure_cheatsheet_images_dir(cheatsheet_id)
+    file_path = os.path.join(images_dir, filename)
+
+    with open(file_path, 'wb') as f:
+        f.write(image_data)
+
+    # Return the URL path
+    return f"/images/{cheatsheet_id}/{filename}"
+
+
+def is_base64_image(src):
+    """Check if the src is a base64 encoded image."""
+    return src and src.startswith('data:image')
+
+
+def is_local_image_url(src):
+    """Check if the src is a local image URL."""
+    return src and src.startswith('/images/')
 
 # Color schemes for sections (cycles through these)
 SECTION_COLORS = [
@@ -168,10 +246,55 @@ def sync_cheatsheets():
                 print(f"Error removing orphan HTML {cheatsheet_id}: {e}")
 
 
+def convert_url_to_base64(url_path):
+    """Convert a local image URL to base64 data URI.
+
+    Args:
+        url_path: Path like /images/cheatsheet_id/filename.png
+
+    Returns:
+        Base64 data URI string, or original path if conversion fails
+    """
+    if not url_path or not url_path.startswith('/images/'):
+        return url_path
+
+    # Extract the file path from the URL
+    # /images/cheatsheet_id/filename.png -> images/cheatsheet_id/filename.png
+    relative_path = url_path.lstrip('/')
+    file_path = os.path.join(BASE_DIR, relative_path)
+
+    if not os.path.exists(file_path):
+        return url_path
+
+    try:
+        # Determine MIME type based on extension
+        ext = os.path.splitext(file_path)[1].lower()
+        mime_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+            '.svg': 'image/svg+xml'
+        }
+        mime_type = mime_types.get(ext, 'image/png')
+
+        # Read and encode the file
+        with open(file_path, 'rb') as f:
+            image_data = f.read()
+
+        base64_data = base64.b64encode(image_data).decode('utf-8')
+        return f"data:{mime_type};base64,{base64_data}"
+    except Exception as e:
+        print(f"Error converting image to base64: {e}")
+        return url_path
+
+
 def get_image_html(image_data, css_class, alt_text="Image"):
     """Generate HTML for an image with optional percentage width.
 
     Supports both string format (old) and object format (new with widthPercent).
+    Converts local URLs to base64 for standalone HTML files.
     """
     if isinstance(image_data, str):
         src = image_data
@@ -179,6 +302,10 @@ def get_image_html(image_data, css_class, alt_text="Image"):
     else:
         src = image_data.get('src', '')
         width_percent = image_data.get('widthPercent')
+
+    # Convert local URLs to base64 for standalone HTML
+    if src.startswith('/images/'):
+        src = convert_url_to_base64(src)
 
     style_attr = f' style="width: {width_percent}%"' if width_percent else ''
 
@@ -1451,7 +1578,7 @@ def get_cheatsheets():
 
 @app.route('/api/cheatsheet/<cheatsheet_id>', methods=['DELETE'])
 def delete_cheatsheet(cheatsheet_id):
-    """Delete a cheatsheet."""
+    """Delete a cheatsheet and its associated images."""
     data_path = get_data_path(cheatsheet_id)
     html_path = get_html_path(cheatsheet_id)
 
@@ -1462,6 +1589,9 @@ def delete_cheatsheet(cheatsheet_id):
     if os.path.exists(html_path):
         os.remove(html_path)
         deleted = True
+
+    # Delete associated images folder
+    delete_cheatsheet_images(cheatsheet_id)
 
     if deleted:
         return jsonify({'success': True, 'message': 'Cheatsheet deleted'})
@@ -1623,6 +1753,62 @@ def update_cheatsheet_group(cheatsheet_id):
     save_cheatsheet(cheatsheet_id, cheatsheet)
 
     return jsonify({'success': True})
+
+
+# Images API
+@app.route('/images/<cheatsheet_id>/<filename>')
+def serve_image(cheatsheet_id, filename):
+    """Serve an image file from a cheatsheet's images directory."""
+    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
+    if not os.path.exists(os.path.join(images_dir, filename)):
+        return 'Image not found', 404
+    return send_from_directory(images_dir, filename)
+
+
+@app.route('/api/cheatsheet/<cheatsheet_id>/image', methods=['POST'])
+def upload_image(cheatsheet_id):
+    """Upload an image for a cheatsheet."""
+    # Check if we have a file in the request
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file.filename or file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not allowed_image_file(file.filename):
+        return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp, svg'}), 400
+
+    # Generate a unique filename
+    original_filename = secure_filename(file.filename) or 'image.png'
+    filename = generate_image_filename(original_filename)
+
+    # Ensure the images directory exists
+    images_dir = ensure_cheatsheet_images_dir(cheatsheet_id)
+
+    # Save the file
+    file_path = os.path.join(images_dir, filename)
+    file.save(file_path)
+
+    # Return the URL
+    url = f"/images/{cheatsheet_id}/{filename}"
+    return jsonify({
+        'success': True,
+        'url': url,
+        'filename': filename
+    })
+
+
+@app.route('/api/cheatsheet/<cheatsheet_id>/image/<filename>', methods=['DELETE'])
+def delete_image(cheatsheet_id, filename):
+    """Delete a specific image from a cheatsheet."""
+    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
+    file_path = os.path.join(images_dir, secure_filename(filename))
+
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return jsonify({'success': True, 'message': 'Image deleted'})
+    return jsonify({'error': 'Image not found'}), 404
 
 
 if __name__ == '__main__':
