@@ -328,7 +328,7 @@ def generate_html(data):
             description = section.get('description', '')
             desc_html = f' - <span class="index-description">{description}</span>' if description else ''
             index_items += f'''
-                <li><a href="#section-{section_num}" onclick="expandSection({section_num}); return false;">{section_num}. {section_title}</a>{desc_html}</li>'''
+                <li><a href="#section-{section_num}" onclick="expandSection({section_num}); return false;">{section_title}</a>{desc_html}</li>'''
 
         index_html = f'''
         <div class="index-section">
