@@ -767,7 +767,10 @@ body {
     border-radius: 6px;
     resize: vertical;
     min-height: 60px;
+    max-height: 300px;
     width: 100%;
+    line-height: 1.5;
+    overflow-y: auto;
 }
 
 .text-input:focus {
@@ -785,13 +788,155 @@ body {
     gap: 10px;
 }
 
-.command-input {
+/* Command Input Wrapper with Syntax Buttons */
+.command-input-wrapper {
     flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Command Editor - Contenteditable WYSIWYG editor */
+.command-editor {
+    width: 100%;
+    min-height: 38px;
+    max-height: 200px;
+    overflow-y: auto;
     font-family: 'Courier New', monospace;
     font-size: 0.9rem;
     padding: 10px;
     border: 1px solid var(--border-color);
     border-radius: 6px;
+    background: var(--bg-light);
+    color: #6c757d;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.command-editor:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* Placeholder for empty contenteditable */
+.command-editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+.command-editor:focus:empty::before {
+    content: attr(data-placeholder);
+}
+
+/* Syntax highlighting colors - inline spans */
+.command-editor .hl-method {
+    color: #e74c3c;
+    font-weight: 500;
+}
+
+.command-editor .hl-param {
+    color: #f39c12;
+}
+
+.command-editor .hl-str {
+    color: #27ae60;
+}
+
+.command-editor .hl-comment {
+    color: #27ae60;
+    font-style: italic;
+}
+
+/* Syntax Buttons Container */
+.syntax-buttons {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+/* Syntax Buttons */
+.syntax-btn {
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border: 1px solid;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: lowercase;
+}
+
+.syntax-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.syntax-btn:active {
+    transform: translateY(0);
+}
+
+/* Method button (red) */
+.syntax-method {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #dc2626;
+}
+
+.syntax-method:hover,
+.syntax-method.active {
+    background: #fecaca;
+    border-color: #f87171;
+}
+
+.syntax-method.active {
+    box-shadow: 0 0 0 2px #dc2626;
+    transform: scale(1.05);
+}
+
+/* Parameter button (orange) */
+.syntax-param {
+    background: #ffedd5;
+    border-color: #fdba74;
+    color: #ea580c;
+}
+
+.syntax-param:hover,
+.syntax-param.active {
+    background: #fed7aa;
+    border-color: #fb923c;
+}
+
+.syntax-param.active {
+    box-shadow: 0 0 0 2px #ea580c;
+    transform: scale(1.05);
+}
+
+/* String button (green) */
+.syntax-str {
+    background: #dcfce7;
+    border-color: #86efac;
+    color: #16a34a;
+}
+
+.syntax-str:hover,
+.syntax-str.active {
+    background: #bbf7d0;
+    border-color: #4ade80;
+}
+
+.syntax-str.active {
+    box-shadow: 0 0 0 2px #16a34a;
+    transform: scale(1.05);
+}
+
+/* Comment button */
+.syntax-comment {
+    background: #f0fdf4;
+    border-color: #a7f3d0;
+    color: #059669;
+    font-family: 'Courier New', monospace;
 }
 
 .comment-input {
@@ -803,7 +948,6 @@ body {
     color: var(--text-muted);
 }
 
-.command-input:focus,
 .comment-input:focus {
     outline: none;
     border-color: var(--primary-color);

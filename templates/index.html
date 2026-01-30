@@ -203,7 +203,14 @@
                 <button type="button" class="type-btn" data-type="text" onclick="setLineType(this, 'text')" title="Text">T</button>
             </div>
             <div class="code-line-inputs code-inputs">
-                <input type="text" class="command-input" placeholder="Code command (use {method:text}, {param:text}, {str:text} for highlighting)">
+                <div class="command-input-wrapper">
+                    <div class="command-editor" contenteditable="true" spellcheck="false" data-placeholder="Code command..."></div>
+                    <div class="syntax-buttons">
+                        <button type="button" class="syntax-btn syntax-method" data-syntax-type="method" onclick="insertSyntaxSpan(this, 'method')" title="Insert method (red)">method</button>
+                        <button type="button" class="syntax-btn syntax-param" data-syntax-type="param" onclick="insertSyntaxSpan(this, 'param')" title="Insert parameter (orange)">param</button>
+                        <button type="button" class="syntax-btn syntax-str" data-syntax-type="str" onclick="insertSyntaxSpan(this, 'str')" title="Insert string (green)">str</button>
+                    </div>
+                </div>
                 <input type="text" class="comment-input" placeholder="Comment">
             </div>
             <div class="code-line-inputs text-inputs" style="display: none;">

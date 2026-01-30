@@ -1329,7 +1329,7 @@ def generate_html(data):
                 bottom: 0;
                 left: 0;
                 right: 0;
-                padding: 4px 10px !important;
+                padding: 1px 10px !important;
                 background: white !important;
                 border-top: 1px solid #ccc !important;
                 font-size: 0.6rem !important;

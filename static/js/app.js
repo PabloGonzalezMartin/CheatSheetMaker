@@ -87,6 +87,9 @@ function initializeApp() {
 
     // Setup drag and drop
     setTimeout(setupDragAndDrop, 200);
+
+    // Initialize auto-resize for textareas
+    initAutoResize();
 }
 
 /**
@@ -172,7 +175,8 @@ function handleKeyboardShortcuts(e) {
  * Handle input changes for undo/redo
  */
 function handleInputChange(e) {
-    if (e.target.matches('.title-input, .section-title-input, .subsection-title-input, .section-description-input, .command-input, .comment-input, .text-input, .image-width-input')) {
+    if (e.target.matches('.title-input, .section-title-input, .subsection-title-input, .section-description-input, .command-editor, .comment-input, .text-input, .image-width-input') ||
+        e.target.closest('.command-editor')) {
         saveToHistory();
     }
 }
@@ -216,7 +220,7 @@ function loadCheatsheetData(data) {
     }
 
     currentCheatsheet.id = data.id;
-    
+
     const titleInput = safeGetElement('cheatsheetTitle');
     if (titleInput) {
         titleInput.value = data.title || '';
@@ -225,7 +229,7 @@ function loadCheatsheetData(data) {
     // Clear existing sections
     const container = safeGetElement('sectionsContainer');
     if (!container) return;
-    
+
     container.innerHTML = '';
 
     // Add sections from data
@@ -287,6 +291,11 @@ function loadCheatsheetData(data) {
     } else {
         addSection();
     }
+
+    // Auto-resize text-input textareas after loading
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.text-input').forEach(autoResizeTextarea);
+    });
 }
 
 /**
@@ -340,8 +349,10 @@ function loadCodeLine(container, line) {
 
         if (codeInputs) codeInputs.style.display = 'none';
         if (textInputs) textInputs.style.display = 'flex';
-        if (textInput) textInput.value = line.text || '';
-        
+        if (textInput) {
+            textInput.value = line.text || '';
+        }
+
         codeBtns.forEach(btn => {
             if (btn.dataset.type === 'text') {
                 btn.classList.add('active');
@@ -350,12 +361,25 @@ function loadCodeLine(container, line) {
             }
         });
     } else {
-        const commandInput = lineEl.querySelector('.command-input');
+        const commandEditor = lineEl.querySelector('.command-editor');
         const commentInput = lineEl.querySelector('.comment-input');
-        if (commandInput) commandInput.value = line.command || '';
+        if (commandEditor && line.command) {
+            // Convert syntax tags to HTML spans
+            commandEditor.innerHTML = syntaxToHtml(line.command);
+        }
         if (commentInput) commentInput.value = line.comment || '';
     }
     container.appendChild(lineEl);
+
+    // Auto-resize text-input AFTER element is in DOM
+    if (lineType === 'text') {
+        const textInput = lineEl.querySelector('.text-input');
+        if (textInput) {
+            requestAnimationFrame(() => {
+                autoResizeTextarea(textInput);
+            });
+        }
+    }
 }
 
 /**
@@ -695,10 +719,10 @@ function addCodeLine(button) {
     // Setup drag and drop for new line
     initDragDrop(newLine, 'code-line-editor');
 
-    // Focus on the command input
-    const commandInput = newLine.querySelector('.command-input');
-    if (commandInput) {
-        commandInput.focus();
+    // Focus on the command editor
+    const commandEditor = newLine.querySelector('.command-editor');
+    if (commandEditor) {
+        commandEditor.focus();
     }
 
     // Save to history for undo/redo
@@ -722,15 +746,263 @@ function removeCodeLine(button) {
         saveToHistory();
     } else {
         // Clear the inputs instead of removing the last line
-        const commandInput = line.querySelector('.command-input');
+        const commandEditor = line.querySelector('.command-editor');
         const commentInput = line.querySelector('.comment-input');
         const textInput = line.querySelector('.text-input');
-        
-        if (commandInput) commandInput.value = '';
+
+        if (commandEditor) commandEditor.innerHTML = '';
         if (commentInput) commentInput.value = '';
         if (textInput) textInput.value = '';
         
         saveToHistory();
+    }
+}
+
+/**
+ * Insert a colored span at cursor position in contenteditable
+ */
+function insertSyntaxSpan(button, type) {
+    if (!validateButton(button)) return;
+
+    const wrapper = button.closest('.command-input-wrapper');
+    if (!wrapper) return;
+
+    const editor = wrapper.querySelector('.command-editor');
+    if (!editor) return;
+
+    // Focus the editor
+    editor.focus();
+
+    // Get current selection
+    const selection = window.getSelection();
+    const selectedText = selection.toString();
+
+    // Create the span element
+    const span = document.createElement('span');
+    span.className = `hl-${type}`;
+    span.setAttribute('data-syntax', type);
+
+    if (type === 'comment') {
+        span.textContent = selectedText ? `# ${selectedText}` : '# ';
+    } else {
+        span.textContent = selectedText || type;
+    }
+
+    // Insert the span
+    if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+
+        // Check if selection is within our editor
+        if (editor.contains(range.commonAncestorContainer) || editor === range.commonAncestorContainer) {
+            range.deleteContents();
+            range.insertNode(span);
+
+            // Move cursor after the span
+            range.setStartAfter(span);
+            range.setEndAfter(span);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } else {
+            // If not in editor, append to end
+            editor.appendChild(span);
+        }
+    } else {
+        editor.appendChild(span);
+    }
+
+    // If no text was selected, select the placeholder text
+    if (!selectedText && type !== 'comment') {
+        const range = document.createRange();
+        range.selectNodeContents(span);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
+    // Save to history for undo/redo
+    saveToHistory();
+}
+
+/**
+ * Auto-resize textarea to fit content (for text-input only now)
+ */
+function autoResizeTextarea(textarea) {
+    if (!textarea) return;
+
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+
+    // Set the height to scrollHeight, but respect min/max
+    const minHeight = 38;
+    const maxHeight = 200;
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+    textarea.style.height = newHeight + 'px';
+}
+
+/**
+ * Convert syntax tags to HTML spans for display
+ * {method:text} -> <span class="hl-method" data-syntax="method">text</span>
+ */
+function syntaxToHtml(text) {
+    if (!text) return '';
+
+    // Escape HTML first to prevent XSS (except our syntax tags)
+    let result = text;
+
+    // Replace {method:...} with highlighted span
+    result = result.replace(/\{method:([^}]+)\}/g, '<span class="hl-method" data-syntax="method">$1</span>');
+
+    // Replace {param:...} with highlighted span
+    result = result.replace(/\{param:([^}]+)\}/g, '<span class="hl-param" data-syntax="param">$1</span>');
+
+    // Replace {str:...} with highlighted span
+    result = result.replace(/\{str:([^}]+)\}/g, '<span class="hl-str" data-syntax="str">$1</span>');
+
+    // Highlight inline comments (# ...) - wrap in span
+    result = result.replace(/(^|\s)(#[^\n]*)$/gm, '$1<span class="hl-comment" data-syntax="comment">$2</span>');
+
+    return result;
+}
+
+/**
+ * Convert HTML spans back to syntax tags for storage
+ * <span class="hl-method" data-syntax="method">text</span> -> {method:text}
+ */
+function htmlToSyntax(editor) {
+    if (!editor) return '';
+
+    // Clone the editor to work with
+    const clone = editor.cloneNode(true);
+
+    // Process all syntax spans
+    clone.querySelectorAll('[data-syntax]').forEach(span => {
+        const type = span.getAttribute('data-syntax');
+        const text = span.textContent;
+
+        if (type === 'comment') {
+            // Comments just keep their text (already has #)
+            span.replaceWith(text);
+        } else {
+            // Wrap in syntax tags
+            span.replaceWith(`{${type}:${text}}`);
+        }
+    });
+
+    // Get the text content (preserves structure)
+    return clone.textContent || '';
+}
+
+/**
+ * Get plain text from command editor for copying
+ */
+function getEditorPlainText(editor) {
+    if (!editor) return '';
+    return editor.textContent || '';
+}
+
+/**
+ * Initialize auto-resize for all textareas
+ */
+function initAutoResize() {
+    // Add input event listener to auto-resize text-input textareas
+    document.addEventListener('input', function(e) {
+        if (e.target.matches('.text-input')) {
+            autoResizeTextarea(e.target);
+        }
+        // Track changes in command-editor for history
+        if (e.target.matches('.command-editor') || e.target.closest('.command-editor')) {
+            saveToHistory();
+        }
+    });
+
+    // Add selection change listener to highlight syntax buttons
+    document.addEventListener('selectionchange', updateSyntaxButtonHighlight);
+
+    // Handle space key to exit colored spans
+    document.addEventListener('keydown', function(e) {
+        if (e.key === ' ' || e.key === 'Spacebar') {
+            const editor = e.target.closest('.command-editor');
+            if (editor) {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    const container = range.startContainer;
+
+                    // Check if we're inside a syntax span
+                    const syntaxSpan = container.nodeType === Node.TEXT_NODE
+                        ? container.parentElement.closest('[data-syntax]')
+                        : container.closest('[data-syntax]');
+
+                    if (syntaxSpan && syntaxSpan.parentElement === editor) {
+                        // Check if cursor is at the end of the span
+                        const isAtEnd = range.startOffset === (container.textContent || '').length;
+
+                        if (isAtEnd) {
+                            e.preventDefault();
+
+                            // Insert a space after the span as a text node
+                            const spaceNode = document.createTextNode('\u00A0'); // Non-breaking space that will be converted
+                            syntaxSpan.after(spaceNode);
+
+                            // Move cursor after the space
+                            range.setStartAfter(spaceNode);
+                            range.setEndAfter(spaceNode);
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+
+                            // Replace with regular space
+                            spaceNode.textContent = ' ';
+
+                            saveToHistory();
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Initial resize for existing textareas
+    document.querySelectorAll('.text-input').forEach(autoResizeTextarea);
+}
+
+/**
+ * Update syntax button highlighting based on cursor position
+ */
+function updateSyntaxButtonHighlight() {
+    // Clear all active states first
+    document.querySelectorAll('.syntax-btn.active').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+
+    const range = selection.getRangeAt(0);
+    const container = range.startContainer;
+
+    // Find the command-editor we're in
+    const editor = container.nodeType === Node.TEXT_NODE
+        ? container.parentElement.closest('.command-editor')
+        : container.closest('.command-editor');
+
+    if (!editor) return;
+
+    // Find the syntax span we're inside
+    const syntaxSpan = container.nodeType === Node.TEXT_NODE
+        ? container.parentElement.closest('[data-syntax]')
+        : container.closest('[data-syntax]');
+
+    if (!syntaxSpan) return;
+
+    const syntaxType = syntaxSpan.getAttribute('data-syntax');
+    if (!syntaxType) return;
+
+    // Find the corresponding button in the same code-line-editor
+    const codeLineEditor = editor.closest('.code-line-editor');
+    if (!codeLineEditor) return;
+
+    const syntaxBtn = codeLineEditor.querySelector(`.syntax-btn[data-syntax-type="${syntaxType}"]`);
+    if (syntaxBtn) {
+        syntaxBtn.classList.add('active');
     }
 }
 
@@ -970,9 +1242,9 @@ function collectEditorData() {
                     lines.push({ type: 'text', text: text });
                 }
             } else {
-                const commandInput = lineEl.querySelector('.command-input');
+                const commandEditor = lineEl.querySelector('.command-editor');
                 const commentInput = lineEl.querySelector('.comment-input');
-                const command = commandInput ? commandInput.value.trim() : '';
+                const command = commandEditor ? htmlToSyntax(commandEditor).trim() : '';
                 const comment = commentInput ? commentInput.value.trim() : '';
                 if (command || comment) {
                     lines.push({ type: 'code', command, comment });
@@ -1023,9 +1295,9 @@ function collectEditorData() {
                         subLines.push({ type: 'text', text: text });
                     }
                 } else {
-                    const commandInput = lineEl.querySelector('.command-input');
+                    const commandEditor = lineEl.querySelector('.command-editor');
                     const commentInput = lineEl.querySelector('.comment-input');
-                    const command = commandInput ? commandInput.value.trim() : '';
+                    const command = commandEditor ? htmlToSyntax(commandEditor).trim() : '';
                     const comment = commentInput ? commentInput.value.trim() : '';
                     if (command || comment) {
                         subLines.push({ type: 'code', command, comment });
@@ -1898,12 +2170,12 @@ function insertCodeLineBefore(button) {
 
     container.insertBefore(newLine, targetLine);
     initDragDrop(newLine, 'code-line-editor');
-    
-    const commandInput = newLine.querySelector('.command-input');
-    if (commandInput) {
-        commandInput.focus();
+
+    const commandEditor = newLine.querySelector('.command-editor');
+    if (commandEditor) {
+        commandEditor.focus();
     }
-    
+
     saveToHistory();
 }
 
