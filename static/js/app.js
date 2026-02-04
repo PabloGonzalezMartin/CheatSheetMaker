@@ -164,6 +164,7 @@ function handleKeyboardShortcuts(e) {
     // Escape to close modal or navigator
     if (e.key === 'Escape') {
         closePreview();
+        closeImportModal();
         const navigator = safeGetElement('sectionNavigator');
         if (navigator && navigator.classList.contains('active')) {
             navigator.classList.remove('active');
@@ -190,6 +191,9 @@ function handleModalOutsideClick(e) {
     }
     if (e.target.id === 'moveToGroupModal') {
         closeMoveToGroupModal();
+    }
+    if (e.target.id === 'importModal') {
+        closeImportModal();
     }
 }
 
@@ -2358,5 +2362,386 @@ async function confirmMoveToGroup() {
     } catch (error) {
         console.error('Error moving cheatsheet:', error);
         alert('Error moving cheatsheet. Please try again.');
+    }
+}
+
+// ==============================================
+// IMPORT JSON FUNCTIONALITY
+// ==============================================
+
+let currentImportType = null;
+let currentImportContext = null;
+let importedFileContent = null;
+
+/**
+ * Show import modal
+ * @param {string} type - 'cheatsheet', 'section', or 'subsection'
+ * @param {HTMLElement} contextElement - The element context (for subsection imports)
+ */
+function showImportModal(type, contextElement = null) {
+    currentImportType = type;
+    currentImportContext = contextElement;
+    importedFileContent = null;
+
+    const modal = safeGetElement('importModal');
+    const title = safeGetElement('importModalTitle');
+    const jsonText = safeGetElement('importJsonText');
+    const fileInput = safeGetElement('importFileInput');
+    const fileSelectedName = safeGetElement('fileSelectedName');
+    const importError = safeGetElement('importError');
+
+    if (!modal) return;
+
+    // Set title based on type
+    const titles = {
+        'cheatsheet': 'Import Cheatsheet',
+        'section': 'Import Section',
+        'subsection': 'Import Subsection'
+    };
+    if (title) title.textContent = titles[type] || 'Import JSON';
+
+    // Reset form
+    if (jsonText) jsonText.value = '';
+    if (fileInput) fileInput.value = '';
+    if (fileSelectedName) fileSelectedName.textContent = '';
+    if (importError) {
+        importError.textContent = '';
+        importError.classList.remove('visible');
+    }
+
+    // Reset to paste tab
+    switchImportTab('paste');
+
+    modal.classList.add('active');
+
+    // Focus on textarea
+    if (jsonText) jsonText.focus();
+}
+
+/**
+ * Close import modal
+ */
+function closeImportModal() {
+    const modal = safeGetElement('importModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+    currentImportType = null;
+    currentImportContext = null;
+    importedFileContent = null;
+}
+
+/**
+ * Switch between paste and file tabs
+ */
+function switchImportTab(tabName) {
+    const pasteTab = safeGetElement('importPasteTab');
+    const fileTab = safeGetElement('importFileTab');
+    const tabs = document.querySelectorAll('.import-tab');
+
+    tabs.forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+    });
+
+    if (pasteTab) pasteTab.style.display = tabName === 'paste' ? 'flex' : 'none';
+    if (fileTab) fileTab.style.display = tabName === 'file' ? 'flex' : 'none';
+}
+
+/**
+ * Handle file selection for import
+ */
+function handleImportFile(input) {
+    if (!input || !input.files || !input.files[0]) return;
+
+    const file = input.files[0];
+    const fileSelectedName = safeGetElement('fileSelectedName');
+
+    if (!file.name.endsWith('.json')) {
+        showImportError('Please select a .json file');
+        return;
+    }
+
+    if (fileSelectedName) {
+        fileSelectedName.textContent = `Selected: ${file.name}`;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        importedFileContent = e.target.result;
+    };
+    reader.onerror = () => {
+        showImportError('Error reading file');
+    };
+    reader.readAsText(file);
+}
+
+/**
+ * Show import error message
+ */
+function showImportError(message) {
+    const importError = safeGetElement('importError');
+    if (importError) {
+        importError.textContent = message;
+        importError.classList.add('visible');
+    }
+}
+
+/**
+ * Hide import error message
+ */
+function hideImportError() {
+    const importError = safeGetElement('importError');
+    if (importError) {
+        importError.textContent = '';
+        importError.classList.remove('visible');
+    }
+}
+
+/**
+ * Confirm and process the import
+ */
+function confirmImport() {
+    hideImportError();
+
+    // Get JSON content from paste tab or file
+    const jsonText = safeGetElement('importJsonText');
+    const pasteTab = safeGetElement('importPasteTab');
+
+    let jsonContent = '';
+
+    if (pasteTab && pasteTab.style.display !== 'none') {
+        // Using paste tab
+        jsonContent = jsonText ? jsonText.value.trim() : '';
+    } else {
+        // Using file tab
+        jsonContent = importedFileContent || '';
+    }
+
+    if (!jsonContent) {
+        showImportError('Please paste JSON content or select a file');
+        return;
+    }
+
+    // Parse JSON
+    let data;
+    try {
+        data = JSON.parse(jsonContent);
+    } catch (e) {
+        showImportError('Invalid JSON format: ' + e.message);
+        return;
+    }
+
+    // Process based on import type
+    try {
+        switch (currentImportType) {
+            case 'cheatsheet':
+                importCheatsheet(data);
+                break;
+            case 'section':
+                importSection(data);
+                break;
+            case 'subsection':
+                importSubsection(data);
+                break;
+            default:
+                showImportError('Unknown import type');
+                return;
+        }
+
+        closeImportModal();
+        showNotification(`${currentImportType.charAt(0).toUpperCase() + currentImportType.slice(1)} imported successfully!`, 'success');
+        saveToHistory();
+    } catch (e) {
+        showImportError('Error importing: ' + e.message);
+    }
+}
+
+/**
+ * Import a full cheatsheet
+ */
+function importCheatsheet(data) {
+    // Validate structure
+    if (!data.title && !data.sections) {
+        throw new Error('Invalid cheatsheet format. Expected "title" and/or "sections".');
+    }
+
+    // If it's a full cheatsheet with sections, load it
+    if (data.sections && Array.isArray(data.sections)) {
+        // Clear current editor
+        currentCheatsheet = { id: null, title: '', sections: [] };
+        const titleInput = safeGetElement('cheatsheetTitle');
+        const container = safeGetElement('sectionsContainer');
+
+        if (titleInput) titleInput.value = data.title || '';
+        if (container) container.innerHTML = '';
+
+        // Load the cheatsheet data
+        loadCheatsheetData(data);
+    } else {
+        throw new Error('Cheatsheet must have a "sections" array.');
+    }
+}
+
+/**
+ * Import a section
+ */
+function importSection(data) {
+    // Validate structure - accept both single section and wrapped format
+    let sectionData = data;
+
+    // If it has a sections array, take the first section
+    if (data.sections && Array.isArray(data.sections) && data.sections.length > 0) {
+        sectionData = data.sections[0];
+    }
+
+    // Validate section has required fields
+    if (!sectionData.title && !sectionData.lines && !sectionData.subsections) {
+        throw new Error('Invalid section format. Expected "title", "lines", and/or "subsections".');
+    }
+
+    const container = safeGetElement('sectionsContainer');
+    if (!container) throw new Error('Sections container not found');
+
+    const sectionCount = container.children.length + 1;
+    const sectionEl = createSectionElement(sectionCount, false);
+    if (!sectionEl) throw new Error('Failed to create section element');
+
+    // Set title
+    const sectionTitleInput = sectionEl.querySelector('.section-title-input');
+    if (sectionTitleInput) {
+        sectionTitleInput.value = sectionData.title || '';
+    }
+
+    // Set description
+    const descInput = sectionEl.querySelector('.section-description-input');
+    if (descInput && sectionData.description) {
+        descInput.value = sectionData.description;
+    }
+
+    // Load images
+    const imagesContainer = sectionEl.querySelector('.images-container');
+    if (imagesContainer && sectionData.images) {
+        sectionData.images.forEach(imageData => {
+            loadImageToContainer(imagesContainer, imageData);
+        });
+    }
+
+    // Load code lines
+    const linesContainer = sectionEl.querySelector('.code-lines-container');
+    if (linesContainer) {
+        if (sectionData.lines && sectionData.lines.length > 0) {
+            sectionData.lines.forEach(line => {
+                loadCodeLine(linesContainer, line);
+            });
+        } else {
+            linesContainer.appendChild(createCodeLineElement());
+        }
+    }
+
+    // Load subsections
+    if (sectionData.subsections && sectionData.subsections.length > 0) {
+        const subsectionsContainer = sectionEl.querySelector('.subsections-container');
+        if (subsectionsContainer) {
+            sectionData.subsections.forEach((subsection, subIndex) => {
+                loadSubsection(subsectionsContainer, subsection, sectionCount, subIndex + 1);
+            });
+        }
+    }
+
+    container.appendChild(sectionEl);
+    initDragDrop(sectionEl, 'section-editor');
+
+    // Focus on the section title
+    if (sectionTitleInput) {
+        sectionTitleInput.focus();
+    }
+}
+
+/**
+ * Import a subsection
+ */
+function importSubsection(data) {
+    // Validate structure - accept both single subsection and wrapped format
+    let subsectionData = data;
+
+    // If it has a subsections array, take the first one
+    if (data.subsections && Array.isArray(data.subsections) && data.subsections.length > 0) {
+        subsectionData = data.subsections[0];
+    }
+
+    // Also check if it's a section with subsections
+    if (data.sections && Array.isArray(data.sections) && data.sections.length > 0) {
+        const firstSection = data.sections[0];
+        if (firstSection.subsections && firstSection.subsections.length > 0) {
+            subsectionData = firstSection.subsections[0];
+        }
+    }
+
+    // Validate subsection has required fields
+    if (!subsectionData.title && !subsectionData.lines) {
+        throw new Error('Invalid subsection format. Expected "title" and/or "lines".');
+    }
+
+    // Find the section context
+    let section;
+    if (currentImportContext) {
+        section = currentImportContext.closest('.section-editor');
+    }
+
+    if (!section) {
+        // If no context, add to the last section or create a new one
+        const container = safeGetElement('sectionsContainer');
+        if (!container) throw new Error('Sections container not found');
+
+        const sections = container.querySelectorAll('.section-editor');
+        if (sections.length === 0) {
+            throw new Error('No sections available. Please create a section first.');
+        }
+        section = sections[sections.length - 1];
+    }
+
+    const sectionNum = parseInt(section.dataset.sectionIndex);
+    const subsectionsContainer = section.querySelector('.subsections-container');
+    if (!subsectionsContainer) throw new Error('Subsections container not found');
+
+    const subsectionCount = subsectionsContainer.children.length + 1;
+    const subsectionEl = createSubsectionElement(sectionNum, subsectionCount, false);
+    if (!subsectionEl) throw new Error('Failed to create subsection element');
+
+    // Set title
+    const subTitleInput = subsectionEl.querySelector('.subsection-title-input');
+    if (subTitleInput) {
+        subTitleInput.value = subsectionData.title || '';
+    }
+
+    // Load images
+    const subImagesContainer = subsectionEl.querySelector('.images-container');
+    if (subImagesContainer && subsectionData.images) {
+        subsectionData.images.forEach(imageData => {
+            loadImageToContainer(subImagesContainer, imageData);
+        });
+    }
+
+    // Load code lines
+    const subLinesContainer = subsectionEl.querySelector('.code-lines-container');
+    if (subLinesContainer) {
+        if (subsectionData.lines && subsectionData.lines.length > 0) {
+            subsectionData.lines.forEach(line => {
+                loadCodeLine(subLinesContainer, line);
+            });
+        } else {
+            subLinesContainer.appendChild(createCodeLineElement());
+        }
+    }
+
+    subsectionsContainer.appendChild(subsectionEl);
+    initDragDrop(subsectionEl, 'subsection-editor');
+
+    // Unfold the parent section if collapsed
+    section.classList.remove('collapsed');
+
+    // Focus on the subsection title
+    if (subTitleInput) {
+        subTitleInput.focus();
     }
 }

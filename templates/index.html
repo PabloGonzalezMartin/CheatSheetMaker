@@ -15,7 +15,10 @@
                 <button class="btn btn-icon sidebar-toggle" onclick="toggleSidebar()" title="Collapse sidebar">◀</button>
             </div>
             <div class="sidebar-content">
-                <button class="btn btn-primary new-btn" onclick="newCheatsheet()">+ New Cheatsheet</button>
+                <div class="sidebar-buttons">
+                    <button class="btn btn-primary new-btn" onclick="newCheatsheet()">+ New Cheatsheet</button>
+                    <button class="btn btn-import" onclick="showImportModal('cheatsheet')" title="Import cheatsheet from JSON">📥 Import</button>
+                </div>
 
                 <!-- Groups Section -->
                 <div class="groups-header">
@@ -110,7 +113,10 @@
                 <!-- Sections will be added here -->
             </div>
 
-            <button class="btn btn-add-section" onclick="addSection()">+ Add Section</button>
+            <div class="section-add-buttons">
+                <button class="btn btn-add-section" onclick="addSection()">+ Add Section</button>
+                <button class="btn btn-import-section" onclick="showImportModal('section')" title="Import section from JSON">📥 Import Section</button>
+            </div>
         </main>
     </div>
 
@@ -139,6 +145,7 @@
                 <div class="section-buttons">
                     <button class="btn btn-add-line" onclick="addCodeLine(this)">+ Add Code Line</button>
                     <button class="btn btn-add-subsection" onclick="addSubsection(this)">+ Add Subsection</button>
+                    <button class="btn btn-import-subsection" onclick="showImportModal('subsection', this)" title="Import subsection from JSON">📥 Import</button>
                 </div>
                 <div class="subsections-container">
                     <!-- Subsections will be added here -->
@@ -274,6 +281,39 @@
                 <div class="modal-actions">
                     <button class="btn btn-secondary" onclick="closeMoveToGroupModal()">Cancel</button>
                     <button class="btn btn-primary" onclick="confirmMoveToGroup()">Move</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import JSON Modal -->
+    <div class="modal" id="importModal">
+        <div class="modal-content modal-medium">
+            <div class="modal-header">
+                <h3 id="importModalTitle">Import JSON</h3>
+                <button class="btn btn-icon" onclick="closeImportModal()">×</button>
+            </div>
+            <div class="modal-body-form">
+                <div class="import-tabs">
+                    <button class="import-tab active" data-tab="paste" onclick="switchImportTab('paste')">Paste JSON</button>
+                    <button class="import-tab" data-tab="file" onclick="switchImportTab('file')">Upload File</button>
+                </div>
+                <div class="import-tab-content" id="importPasteTab">
+                    <label for="importJsonText">Paste your JSON here:</label>
+                    <textarea id="importJsonText" class="form-textarea" placeholder='{"title": "...", "sections": [...]}' rows="12"></textarea>
+                </div>
+                <div class="import-tab-content" id="importFileTab" style="display: none;">
+                    <label>Select a JSON file:</label>
+                    <div class="file-upload-area">
+                        <input type="file" id="importFileInput" accept=".json,application/json" onchange="handleImportFile(this)">
+                        <span class="file-upload-label">Click to select or drag a .json file</span>
+                        <span class="file-selected" id="fileSelectedName"></span>
+                    </div>
+                </div>
+                <div class="import-error" id="importError"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="confirmImport()">Import</button>
                 </div>
             </div>
         </div>
