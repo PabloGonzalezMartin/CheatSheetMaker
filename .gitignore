@@ -109,9 +109,11 @@ coverage.xml
 *.sqlite3
 data/
 ready_cheatsheets/
-data/
 cheatsheets/
 images/
+migrations/
+pdf/
+
 
 # ============================================
 # LOGS Y ARCHIVOS TEMPORALES

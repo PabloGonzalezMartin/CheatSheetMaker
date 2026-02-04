@@ -5,44 +5,63 @@ A web application for creating and managing HTML cheatsheets.
 
 import os
 import re
-import json
-import uuid
 import hashlib
 import base64
-import shutil
+import html as html_module
+from io import BytesIO
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, Response
+from flask_login import LoginManager, login_required, current_user
+from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
-
-app = Flask(__name__)
-
-# Configuration
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-CHEATSHEETS_DIR = os.path.join(BASE_DIR, 'cheatsheets')
-IMAGES_DIR = os.path.join(BASE_DIR, 'images')
-GROUPS_FILE = os.path.join(DATA_DIR, '_groups.json')
+from models import db, User, Cheatsheet, Group, Image
+from auth import auth
+from config import DevelopmentConfig, ProductionConfig
 
 # Allowed image extensions
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
 
-# Ensure directories exist
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(CHEATSHEETS_DIR, exist_ok=True)
-os.makedirs(IMAGES_DIR, exist_ok=True)
-PDF_DIR = os.path.join(BASE_DIR, 'pdf')
-os.makedirs(PDF_DIR, exist_ok=True)
+
+def create_app(config_class=None):
+    app = Flask(__name__)
+
+    if config_class is None:
+        config_class = ProductionConfig if os.environ.get('FLASK_ENV') == 'production' else DevelopmentConfig
+    app.config.from_object(config_class)
+
+    db.init_app(app)
+    Migrate(app, db)
+
+    login_manager = LoginManager()
+    login_manager.login_view = 'auth.login'
+    login_manager.init_app(app)
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        return db.session.get(User, int(user_id))
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Authentication required'}), 401
+        return redirect(url_for('auth.login', next=request.url))
+
+    app.register_blueprint(auth)
+
+    # Register routes
+    register_routes(app)
+
+    return app
 
 
-def generate_cheatsheet_id(title):
+def generate_cheatsheet_id(title, user_id=None):
     """Generate a filename-safe ID from title with a short hash."""
-    # Clean the title: lowercase, replace spaces with underscores, remove special chars
     clean_title = re.sub(r'[^a-zA-Z0-9\s_-]', '', title.lower())
     clean_title = re.sub(r'\s+', '_', clean_title.strip())
-    clean_title = clean_title[:30]  # Limit length
+    clean_title = clean_title[:30]
 
-    # Generate a short hash
-    hash_str = hashlib.md5(title.encode()).hexdigest()[:6]
+    hash_input = f"{user_id}:{title}" if user_id else title
+    hash_str = hashlib.md5(hash_input.encode()).hexdigest()[:6]
 
     return f"{clean_title}_{hash_str}" if clean_title else hash_str
 
@@ -53,68 +72,13 @@ def allowed_image_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
-def get_cheatsheet_images_dir(cheatsheet_id):
-    """Get the path to a cheatsheet's images directory."""
-    return os.path.join(IMAGES_DIR, cheatsheet_id)
-
-
-def ensure_cheatsheet_images_dir(cheatsheet_id):
-    """Ensure the images directory for a cheatsheet exists."""
-    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
-    os.makedirs(images_dir, exist_ok=True)
-    return images_dir
-
-
-def generate_image_filename(original_filename, section_idx=None, subsection_idx=None, image_idx=0):
+def generate_image_filename(original_filename):
     """Generate a unique filename for an uploaded image."""
     ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else 'png'
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    random_hash = hashlib.md5(os.urandom(16)).hexdigest()[:6]
+    return f"img_{timestamp}_{random_hash}.{ext}"
 
-    if subsection_idx is not None:
-        prefix = f"section_{section_idx}_subsection_{subsection_idx}_img_{image_idx}"
-    elif section_idx is not None:
-        prefix = f"section_{section_idx}_img_{image_idx}"
-    else:
-        # Generate unique name with timestamp and random hash
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        random_hash = hashlib.md5(os.urandom(16)).hexdigest()[:6]
-        prefix = f"img_{timestamp}_{random_hash}"
-
-    return f"{prefix}.{ext}"
-
-
-def delete_cheatsheet_images(cheatsheet_id):
-    """Delete all images for a cheatsheet."""
-    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
-    if os.path.exists(images_dir):
-        shutil.rmtree(images_dir)
-
-
-def save_base64_image(base64_data, cheatsheet_id, filename):
-    """Save a base64 encoded image to file and return the URL path."""
-    # Extract the actual base64 data (remove data:image/xxx;base64, prefix)
-    if ',' in base64_data:
-        base64_data = base64_data.split(',', 1)[1]
-
-    # Decode and save
-    image_data = base64.b64decode(base64_data)
-    images_dir = ensure_cheatsheet_images_dir(cheatsheet_id)
-    file_path = os.path.join(images_dir, filename)
-
-    with open(file_path, 'wb') as f:
-        f.write(image_data)
-
-    # Return the URL path
-    return f"/images/{cheatsheet_id}/{filename}"
-
-
-def is_base64_image(src):
-    """Check if the src is a base64 encoded image."""
-    return src and src.startswith('data:image')
-
-
-def is_local_image_url(src):
-    """Check if the src is a local image URL."""
-    return src and src.startswith('/images/')
 
 # Color schemes for sections (cycles through these)
 SECTION_COLORS = [
@@ -145,157 +109,31 @@ SECTION_COLORS = [
 ]
 
 
-def get_data_path(cheatsheet_id):
-    """Get the path to a cheatsheet's JSON data file."""
-    return os.path.join(DATA_DIR, f'{cheatsheet_id}.json')
-
-
-def get_html_path(cheatsheet_id):
-    """Get the path to a cheatsheet's generated HTML file."""
-    return os.path.join(CHEATSHEETS_DIR, f'{cheatsheet_id}.html')
-
-
-def load_cheatsheet(cheatsheet_id):
-    """Load a cheatsheet from JSON file."""
-    path = get_data_path(cheatsheet_id)
-    if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return None
-
-
-def save_cheatsheet(cheatsheet_id, data):
-    """Save a cheatsheet to JSON file."""
-    path = get_data_path(cheatsheet_id)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
-def list_cheatsheets():
-    """List all saved cheatsheets."""
-    cheatsheets = []
-    for filename in os.listdir(DATA_DIR):
-        if filename.endswith('.json') and not filename.startswith('_'):
-            cheatsheet_id = filename[:-5]
-            data = load_cheatsheet(cheatsheet_id)
-            if data:
-                cheatsheets.append({
-                    'id': cheatsheet_id,
-                    'title': data.get('title', 'Untitled'),
-                    'group': data.get('group', ''),
-                    'created_at': data.get('created_at', ''),
-                    'updated_at': data.get('updated_at', '')
-                })
-    return sorted(cheatsheets, key=lambda x: x.get('updated_at', ''), reverse=True)
-
-
-def load_groups():
-    """Load groups from the groups file."""
-    if os.path.exists(GROUPS_FILE):
-        with open(GROUPS_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return []
-
-
-def save_groups(groups):
-    """Save groups to the groups file."""
-    with open(GROUPS_FILE, 'w', encoding='utf-8') as f:
-        json.dump(groups, f, indent=2, ensure_ascii=False)
-
-
-def sync_cheatsheets():
-    """Synchronize JSON data files and HTML cheatsheets.
-
-    - Generate missing HTML files from existing JSON files
-    - Remove orphan HTML files (HTML without corresponding JSON)
-    """
-    # Get all JSON file IDs
-    json_ids = set()
-    for filename in os.listdir(DATA_DIR):
-        if filename.endswith('.json'):
-            json_ids.add(filename[:-5])
-
-    # Get all HTML file IDs
-    html_ids = set()
-    for filename in os.listdir(CHEATSHEETS_DIR):
-        if filename.endswith('.html'):
-            html_ids.add(filename[:-5])
-
-    # Generate missing HTML files from JSON
-    for cheatsheet_id in json_ids:
-        if cheatsheet_id not in html_ids:
-            data = load_cheatsheet(cheatsheet_id)
-            if data:
-                try:
-                    html_content = generate_html(data)
-                    html_path = get_html_path(cheatsheet_id)
-                    with open(html_path, 'w', encoding='utf-8') as f:
-                        f.write(html_content)
-                    print(f"Generated HTML for: {data.get('title', cheatsheet_id)}")
-                except Exception as e:
-                    print(f"Error generating HTML for {cheatsheet_id}: {e}")
-
-    # Remove orphan HTML files (no corresponding JSON)
-    for cheatsheet_id in html_ids:
-        if cheatsheet_id not in json_ids:
-            html_path = get_html_path(cheatsheet_id)
-            try:
-                os.remove(html_path)
-                print(f"Removed orphan HTML: {cheatsheet_id}.html")
-            except Exception as e:
-                print(f"Error removing orphan HTML {cheatsheet_id}: {e}")
-
-
 def convert_url_to_base64(url_path):
-    """Convert a local image URL to base64 data URI.
-
-    Args:
-        url_path: Path like /images/cheatsheet_id/filename.png
-
-    Returns:
-        Base64 data URI string, or original path if conversion fails
-    """
+    """Convert a local image URL to base64 data URI by reading from the database."""
     if not url_path or not url_path.startswith('/images/'):
         return url_path
 
-    # Extract the file path from the URL
-    # /images/cheatsheet_id/filename.png -> images/cheatsheet_id/filename.png
-    relative_path = url_path.lstrip('/')
-    file_path = os.path.join(BASE_DIR, relative_path)
+    parts = url_path.strip('/').split('/')
+    if len(parts) < 3:
+        return url_path
 
-    if not os.path.exists(file_path):
+    cheatsheet_id = parts[1]
+    filename = parts[2]
+
+    image = Image.query.filter_by(cheatsheet_id=cheatsheet_id, filename=filename).first()
+    if not image:
         return url_path
 
     try:
-        # Determine MIME type based on extension
-        ext = os.path.splitext(file_path)[1].lower()
-        mime_types = {
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp',
-            '.svg': 'image/svg+xml'
-        }
-        mime_type = mime_types.get(ext, 'image/png')
-
-        # Read and encode the file
-        with open(file_path, 'rb') as f:
-            image_data = f.read()
-
-        base64_data = base64.b64encode(image_data).decode('utf-8')
-        return f"data:{mime_type};base64,{base64_data}"
-    except Exception as e:
-        print(f"Error converting image to base64: {e}")
+        base64_data = base64.b64encode(image.data).decode('utf-8')
+        return f"data:{image.content_type};base64,{base64_data}"
+    except Exception:
         return url_path
 
 
 def get_image_html(image_data, css_class, alt_text="Image"):
-    """Generate HTML for an image with optional percentage width.
-
-    Supports both string format (old) and object format (new with widthPercent).
-    Converts local URLs to base64 for standalone HTML files.
-    """
+    """Generate HTML for an image with optional percentage width."""
     if isinstance(image_data, str):
         src = image_data
         width_percent = None
@@ -303,13 +141,87 @@ def get_image_html(image_data, css_class, alt_text="Image"):
         src = image_data.get('src', '')
         width_percent = image_data.get('widthPercent')
 
-    # Convert local URLs to base64 for standalone HTML
     if src.startswith('/images/'):
         src = convert_url_to_base64(src)
 
     style_attr = f' style="width: {width_percent}%"' if width_percent else ''
 
     return f'<img src="{src}" class="{css_class} zoomable" alt="{alt_text}" onclick="openImageLightbox(this)"{style_attr}>'
+
+
+def strip_syntax_tags(command):
+    """Remove syntax highlighting tags from a command, keeping only the visible text.
+
+    Converts {method:text} -> text, {param:text} -> text, {str:text} -> text
+    """
+    command = re.sub(r'\{method:([^}]+)\}', r'\1', command)
+    command = re.sub(r'\{param:([^}]+)\}', r'\1', command)
+    command = re.sub(r'\{str:([^}]+)\}', r'\1', command)
+    return command
+
+
+def format_text_with_lists(text):
+    """Convert markdown-style lists to HTML lists.
+
+    Supports:
+    - Unordered lists: lines starting with - or *
+    - Ordered lists: lines starting with 1. 2. etc.
+    """
+    lines = text.split('\n')
+    result = []
+    in_ul = False
+    in_ol = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Check for unordered list item (- or *)
+        if re.match(r'^[-*]\s+', stripped):
+            content = re.sub(r'^[-*]\s+', '', stripped)
+            if in_ol:
+                result.append('</ol>')
+                in_ol = False
+            if not in_ul:
+                result.append('<ul>')
+                in_ul = True
+            result.append(f'<li>{content}</li>')
+        # Check for ordered list item (1. 2. etc.)
+        elif re.match(r'^\d+\.\s+', stripped):
+            content = re.sub(r'^\d+\.\s+', '', stripped)
+            if in_ul:
+                result.append('</ul>')
+                in_ul = False
+            if not in_ol:
+                result.append('<ol>')
+                in_ol = True
+            result.append(f'<li>{content}</li>')
+        else:
+            # Close any open lists
+            if in_ul:
+                result.append('</ul>')
+                in_ul = False
+            if in_ol:
+                result.append('</ol>')
+                in_ol = False
+            if stripped:
+                result.append(stripped)
+
+    # Close any remaining open lists
+    if in_ul:
+        result.append('</ul>')
+    if in_ol:
+        result.append('</ol>')
+
+    return '\n'.join(result)
+
+
+def apply_syntax_highlighting(command):
+    """Apply syntax highlighting to a command string."""
+    command = re.sub(r'\{method:([^}]+)\}', r'<span class="method">\1</span>', command)
+    command = re.sub(r'\{param:([^}]+)\}', r'<span class="parameter">\1</span>', command)
+    command = re.sub(r'\{str:([^}]+)\}', r'<span class="string">\1</span>', command)
+    command = re.sub(r'(^|\s)(#.*)$', r'\1<span class="inline-comment">\2</span>', command)
+    return command
 
 
 def generate_html(data):
@@ -376,8 +288,7 @@ def generate_html(data):
                 # Create clean command for copying (remove syntax tags)
                 clean_command = strip_syntax_tags(command)
                 # Encode for safe data attribute storage
-                import html
-                encoded_command = html.escape(clean_command, quote=True)
+                encoded_command = html_module.escape(clean_command, quote=True)
                 code_lines_html += f'''
                 <div class="code-line">
                     <span class="code-command">{highlighted_command}</span>
@@ -420,8 +331,7 @@ def generate_html(data):
                 else:
                     highlighted_command = apply_syntax_highlighting(command)
                     clean_command = strip_syntax_tags(command)
-                    import html
-                    encoded_command = html.escape(clean_command, quote=True)
+                    encoded_command = html_module.escape(clean_command, quote=True)
                     sub_code_lines_html += f'''
                     <div class="code-line">
                         <span class="code-command">{highlighted_command}</span>
@@ -1548,398 +1458,376 @@ def generate_html(data):
     return html
 
 
-def strip_syntax_tags(command):
-    """Remove syntax highlighting tags from a command, keeping only the visible text.
+def register_routes(app):
+    """Register all application routes."""
 
-    Converts {method:text} -> text, {param:text} -> text, {str:text} -> text
-    """
-    # Remove {method:...}, {param:...}, {str:...} tags, keeping the content
-    command = re.sub(r'\{method:([^}]+)\}', r'\1', command)
-    command = re.sub(r'\{param:([^}]+)\}', r'\1', command)
-    command = re.sub(r'\{str:([^}]+)\}', r'\1', command)
-    return command
+    # ─── Page Routes ──────────────────────────────────────────────
 
+    @app.route('/')
+    @login_required
+    def index():
+        """Serve the main editor page."""
+        cheatsheets = Cheatsheet.query.filter_by(user_id=current_user.id)\
+            .order_by(Cheatsheet.updated_at.desc()).all()
+        cs_list = [{
+            'id': c.id,
+            'title': c.title,
+            'group': c.group_id or '',
+            'created_at': c.created_at.isoformat() if c.created_at else '',
+            'updated_at': c.updated_at.isoformat() if c.updated_at else ''
+        } for c in cheatsheets]
 
-def format_text_with_lists(text):
-    """Convert markdown-style lists to HTML lists.
+        groups = Group.query.filter_by(user_id=current_user.id).all()
+        groups_list = [{'id': g.id, 'name': g.name, 'color': g.color} for g in groups]
 
-    Supports:
-    - Unordered lists: lines starting with - or *
-    - Ordered lists: lines starting with 1. 2. etc.
-    """
-    lines = text.split('\n')
-    result = []
-    in_ul = False
-    in_ol = False
+        return render_template('index.html', cheatsheets=cs_list, groups=groups_list)
 
-    for line in lines:
-        stripped = line.strip()
+    @app.route('/edit/<cheatsheet_id>')
+    @login_required
+    def edit_cheatsheet(cheatsheet_id):
+        """Edit an existing cheatsheet."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if cs:
+            cheatsheets = Cheatsheet.query.filter_by(user_id=current_user.id)\
+                .order_by(Cheatsheet.updated_at.desc()).all()
+            cs_list = [{
+                'id': c.id, 'title': c.title, 'group': c.group_id or '',
+                'created_at': c.created_at.isoformat() if c.created_at else '',
+                'updated_at': c.updated_at.isoformat() if c.updated_at else ''
+            } for c in cheatsheets]
+            groups = Group.query.filter_by(user_id=current_user.id).all()
+            groups_list = [{'id': g.id, 'name': g.name, 'color': g.color} for g in groups]
+            return render_template('index.html', cheatsheets=cs_list, groups=groups_list, edit_data=cs.data)
+        return redirect(url_for('index'))
 
-        # Check for unordered list item (- or *)
-        if re.match(r'^[-*]\s+', stripped):
-            content = re.sub(r'^[-*]\s+', '', stripped)
-            if in_ol:
-                result.append('</ol>')
-                in_ol = False
-            if not in_ul:
-                result.append('<ul>')
-                in_ul = True
-            result.append(f'<li>{content}</li>')
-        # Check for ordered list item (1. 2. etc.)
-        elif re.match(r'^\d+\.\s+', stripped):
-            content = re.sub(r'^\d+\.\s+', '', stripped)
-            if in_ul:
-                result.append('</ul>')
-                in_ul = False
-            if not in_ol:
-                result.append('<ol>')
-                in_ol = True
-            result.append(f'<li>{content}</li>')
+    @app.route('/preview/<cheatsheet_id>')
+    @login_required
+    def preview_cheatsheet(cheatsheet_id):
+        """Preview a generated cheatsheet."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return 'Cheatsheet not found', 404
+        html_content = generate_html(cs.data)
+        return html_content
+
+    @app.route('/download/<cheatsheet_id>')
+    @login_required
+    def download_cheatsheet(cheatsheet_id):
+        """Download a cheatsheet as HTML file."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return 'Cheatsheet not found', 404
+
+        html_content = generate_html(cs.data)
+        safe_title = "".join(c for c in cs.title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"{safe_title}.html"
+
+        return Response(
+            html_content,
+            mimetype='text/html',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+
+    @app.route('/download-json/<cheatsheet_id>')
+    @login_required
+    def download_json(cheatsheet_id):
+        """Download a cheatsheet as JSON file."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return 'Cheatsheet not found', 404
+
+        import json
+        json_content = json.dumps(cs.data, indent=2, ensure_ascii=False)
+        safe_title = "".join(c for c in cs.title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"{safe_title}.json"
+
+        return Response(
+            json_content,
+            mimetype='application/json',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
+
+    # ─── Public Sharing ──────────────────────────────────────────
+
+    @app.route('/shared/<cheatsheet_id>')
+    def shared_cheatsheet(cheatsheet_id):
+        """View a publicly shared cheatsheet (no login required)."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, is_public=True).first()
+        if not cs:
+            return 'Cheatsheet not found or not public', 404
+        html_content = generate_html(cs.data)
+        return html_content
+
+    # ─── Cheatsheet API ──────────────────────────────────────────
+
+    @app.route('/api/cheatsheet', methods=['POST'])
+    @login_required
+    def create_cheatsheet():
+        """Create or update a cheatsheet."""
+        data = request.json
+
+        cheatsheet_id = data.get('id')
+        if not cheatsheet_id:
+            title = data.get('title', 'Untitled')
+            cheatsheet_id = generate_cheatsheet_id(title, current_user.id)
+
+        now = datetime.utcnow()
+
+        cheatsheet_data = {
+            'id': cheatsheet_id,
+            'title': data.get('title', 'Untitled'),
+            'group': data.get('group', ''),
+            'sections': data.get('sections', []),
+            'created_at': data.get('created_at') or now.isoformat(),
+            'updated_at': now.isoformat()
+        }
+
+        existing = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if existing:
+            existing.title = cheatsheet_data['title']
+            existing.data = cheatsheet_data
+            existing.group_id = data.get('group') or None
+            existing.updated_at = now
         else:
-            # Close any open lists
-            if in_ul:
-                result.append('</ul>')
-                in_ul = False
-            if in_ol:
-                result.append('</ol>')
-                in_ol = False
-            if stripped:
-                result.append(stripped)
-
-    # Close any remaining open lists
-    if in_ul:
-        result.append('</ul>')
-    if in_ol:
-        result.append('</ol>')
-
-    return '\n'.join(result)
-
-
-def apply_syntax_highlighting(command):
-    """Apply syntax highlighting to a command string.
-
-    Looks for patterns marked with special syntax:
-    - {method:text} -> <span class="method">text</span>
-    - {param:text} -> <span class="parameter">text</span>
-    - {str:text} -> <span class="string">text</span>
-    - # comment -> <span class="inline-comment"># comment</span>
-    """
-    # Replace {method:...}
-    command = re.sub(r'\{method:([^}]+)\}', r'<span class="method">\1</span>', command)
-    # Replace {param:...}
-    command = re.sub(r'\{param:([^}]+)\}', r'<span class="parameter">\1</span>', command)
-    # Replace {str:...}
-    command = re.sub(r'\{str:([^}]+)\}', r'<span class="string">\1</span>', command)
-    # Highlight inline comments (# ...) - but not inside strings or already highlighted
-    # Only match # at the start or after a space, and capture until end of line
-    command = re.sub(r'(^|\s)(#.*)$', r'\1<span class="inline-comment">\2</span>', command)
-
-    return command
-
-
-# Routes
-@app.route('/')
-def index():
-    """Serve the main editor page."""
-    # Sync cheatsheets on page load (handles manual file additions/deletions)
-    sync_cheatsheets()
-    cheatsheets = list_cheatsheets()
-    groups = load_groups()
-    return render_template('index.html', cheatsheets=cheatsheets, groups=groups)
-
-
-@app.route('/api/cheatsheet', methods=['POST'])
-def create_cheatsheet():
-    """Create or update a cheatsheet."""
-    data = request.json
-
-    # Use existing ID if provided (editing), otherwise generate from title
-    cheatsheet_id = data.get('id')
-    if not cheatsheet_id:
-        title = data.get('title', 'Untitled')
-        cheatsheet_id = generate_cheatsheet_id(title)
-
-    now = datetime.now().isoformat()
-
-    # Prepare cheatsheet data
-    cheatsheet_data = {
-        'id': cheatsheet_id,
-        'title': data.get('title', 'Untitled'),
-        'group': data.get('group', ''),
-        'sections': data.get('sections', []),
-        'created_at': data.get('created_at') or now,
-        'updated_at': now
-    }
-
-    # Save JSON data
-    save_cheatsheet(cheatsheet_id, cheatsheet_data)
-
-    # Generate and save HTML
-    html_content = generate_html(cheatsheet_data)
-    html_path = get_html_path(cheatsheet_id)
-    with open(html_path, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-
-    return jsonify({
-        'success': True,
-        'id': cheatsheet_id,
-        'message': 'Cheatsheet saved successfully',
-        'html_path': html_path
-    })
-
-
-@app.route('/api/cheatsheet/<cheatsheet_id>', methods=['GET'])
-def get_cheatsheet(cheatsheet_id):
-    """Get a cheatsheet by ID."""
-    data = load_cheatsheet(cheatsheet_id)
-    if data:
-        return jsonify(data)
-    return jsonify({'error': 'Cheatsheet not found'}), 404
-
-
-@app.route('/api/cheatsheets', methods=['GET'])
-def get_cheatsheets():
-    """List all cheatsheets."""
-    return jsonify(list_cheatsheets())
-
-
-@app.route('/api/cheatsheet/<cheatsheet_id>', methods=['DELETE'])
-def delete_cheatsheet(cheatsheet_id):
-    """Delete a cheatsheet and its associated images."""
-    data_path = get_data_path(cheatsheet_id)
-    html_path = get_html_path(cheatsheet_id)
-
-    deleted = False
-    if os.path.exists(data_path):
-        os.remove(data_path)
-        deleted = True
-    if os.path.exists(html_path):
-        os.remove(html_path)
-        deleted = True
-
-    # Delete associated images folder
-    delete_cheatsheet_images(cheatsheet_id)
-
-    if deleted:
-        return jsonify({'success': True, 'message': 'Cheatsheet deleted'})
-    return jsonify({'error': 'Cheatsheet not found'}), 404
-
-
-@app.route('/preview/<cheatsheet_id>')
-def preview_cheatsheet(cheatsheet_id):
-    """Preview a generated cheatsheet."""
-    html_path = get_html_path(cheatsheet_id)
-
-    # Always regenerate HTML to ensure latest code is used
-    data = load_cheatsheet(cheatsheet_id)
-    if not data:
-        return 'Cheatsheet not found', 404
-    html_content = generate_html(data)
-    with open(html_path, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-
-    return html_content
-
-
-@app.route('/download/<cheatsheet_id>')
-def download_cheatsheet(cheatsheet_id):
-    """Download a cheatsheet as HTML file."""
-    data = load_cheatsheet(cheatsheet_id)
-    if not data:
-        return 'Cheatsheet not found', 404
-
-    html_path = get_html_path(cheatsheet_id)
-    if not os.path.exists(html_path):
-        # Generate HTML if it doesn't exist
-        html_content = generate_html(data)
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-
-    # Create a safe filename
-    safe_title = "".join(c for c in data.get('title', 'cheatsheet') if c.isalnum() or c in (' ', '-', '_')).rstrip()
-    filename = f"{safe_title}.html"
-
-    return send_file(html_path, as_attachment=True, download_name=filename)
-
-
-@app.route('/download-json/<cheatsheet_id>')
-def download_json(cheatsheet_id):
-    """Download a cheatsheet as JSON file."""
-    data = load_cheatsheet(cheatsheet_id)
-    if not data:
-        return 'Cheatsheet not found', 404
-
-    data_path = get_data_path(cheatsheet_id)
-
-    # Create a safe filename
-    safe_title = "".join(c for c in data.get('title', 'cheatsheet') if c.isalnum() or c in (' ', '-', '_')).rstrip()
-    filename = f"{safe_title}.json"
-
-    return send_file(data_path, as_attachment=True, download_name=filename, mimetype='application/json')
-
-
-@app.route('/edit/<cheatsheet_id>')
-def edit_cheatsheet(cheatsheet_id):
-    """Edit an existing cheatsheet."""
-    data = load_cheatsheet(cheatsheet_id)
-    if data:
-        cheatsheets = list_cheatsheets()
-        groups = load_groups()
-        return render_template('index.html', cheatsheets=cheatsheets, groups=groups, edit_data=data)
-    return redirect(url_for('index'))
-
-
-# Groups API
-@app.route('/api/groups', methods=['GET'])
-def get_groups():
-    """Get all groups."""
-    return jsonify(load_groups())
-
-
-@app.route('/api/groups', methods=['POST'])
-def create_group():
-    """Create a new group."""
-    data = request.json
-    name = data.get('name', '').strip()
-
-    if not name:
-        return jsonify({'error': 'Group name is required'}), 400
-
-    groups = load_groups()
-
-    # Check if group already exists
-    if any(g['name'].lower() == name.lower() for g in groups):
-        return jsonify({'error': 'Group already exists'}), 400
-
-    # Generate ID from name
-    group_id = re.sub(r'[^a-zA-Z0-9]', '_', name.lower())[:20]
-    group_id = f"{group_id}_{hashlib.md5(name.encode()).hexdigest()[:4]}"
-
-    new_group = {
-        'id': group_id,
-        'name': name,
-        'color': data.get('color', '#667eea')
-    }
-
-    groups.append(new_group)
-    save_groups(groups)
-
-    return jsonify({'success': True, 'group': new_group})
-
-
-@app.route('/api/groups/<group_id>', methods=['PUT'])
-def update_group(group_id):
-    """Update a group."""
-    data = request.json
-    groups = load_groups()
-
-    for i, g in enumerate(groups):
-        if g['id'] == group_id:
-            if 'name' in data:
-                groups[i]['name'] = data['name']
-            if 'color' in data:
-                groups[i]['color'] = data['color']
-            save_groups(groups)
-            return jsonify({'success': True, 'group': groups[i]})
-
-    return jsonify({'error': 'Group not found'}), 404
-
-
-@app.route('/api/groups/<group_id>', methods=['DELETE'])
-def delete_group(group_id):
-    """Delete a group and unassign all cheatsheets from it."""
-    groups = load_groups()
-
-    # Find and remove the group
-    groups = [g for g in groups if g['id'] != group_id]
-    save_groups(groups)
-
-    # Unassign cheatsheets from this group
-    for filename in os.listdir(DATA_DIR):
-        if filename.endswith('.json') and not filename.startswith('_'):
-            cheatsheet_id = filename[:-5]
-            data = load_cheatsheet(cheatsheet_id)
-            if data and data.get('group') == group_id:
-                data['group'] = ''
-                save_cheatsheet(cheatsheet_id, data)
-
-    return jsonify({'success': True})
-
-
-@app.route('/api/cheatsheet/<cheatsheet_id>/group', methods=['PUT'])
-def update_cheatsheet_group(cheatsheet_id):
-    """Update a cheatsheet's group assignment."""
-    data = request.json
-    group_id = data.get('group', '')
-
-    cheatsheet = load_cheatsheet(cheatsheet_id)
-    if not cheatsheet:
+            cs = Cheatsheet(
+                id=cheatsheet_id,
+                user_id=current_user.id,
+                title=cheatsheet_data['title'],
+                data=cheatsheet_data,
+                group_id=data.get('group') or None,
+                created_at=now,
+                updated_at=now
+            )
+            db.session.add(cs)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'id': cheatsheet_id,
+            'message': 'Cheatsheet saved successfully'
+        })
+
+    @app.route('/api/cheatsheet/<cheatsheet_id>', methods=['GET'])
+    @login_required
+    def get_cheatsheet(cheatsheet_id):
+        """Get a cheatsheet by ID."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if cs:
+            return jsonify(cs.data)
         return jsonify({'error': 'Cheatsheet not found'}), 404
 
-    cheatsheet['group'] = group_id
-    save_cheatsheet(cheatsheet_id, cheatsheet)
+    @app.route('/api/cheatsheets', methods=['GET'])
+    @login_required
+    def get_cheatsheets():
+        """List all cheatsheets for current user."""
+        cheatsheets = Cheatsheet.query.filter_by(user_id=current_user.id)\
+            .order_by(Cheatsheet.updated_at.desc()).all()
+        return jsonify([{
+            'id': c.id, 'title': c.title, 'group': c.group_id or '',
+            'created_at': c.created_at.isoformat() if c.created_at else '',
+            'updated_at': c.updated_at.isoformat() if c.updated_at else ''
+        } for c in cheatsheets])
 
-    return jsonify({'success': True})
+    @app.route('/api/cheatsheet/<cheatsheet_id>', methods=['DELETE'])
+    @login_required
+    def delete_cheatsheet(cheatsheet_id):
+        """Delete a cheatsheet and its associated images."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return jsonify({'error': 'Cheatsheet not found'}), 404
 
+        db.session.delete(cs)  # Cascade deletes images
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Cheatsheet deleted'})
 
-# Images API
-@app.route('/images/<cheatsheet_id>/<filename>')
-def serve_image(cheatsheet_id, filename):
-    """Serve an image file from a cheatsheet's images directory."""
-    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
-    if not os.path.exists(os.path.join(images_dir, filename)):
-        return 'Image not found', 404
-    return send_from_directory(images_dir, filename)
+    @app.route('/api/cheatsheet/<cheatsheet_id>/group', methods=['PUT'])
+    @login_required
+    def update_cheatsheet_group(cheatsheet_id):
+        """Update a cheatsheet's group assignment."""
+        data = request.json
+        group_id = data.get('group', '')
 
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return jsonify({'error': 'Cheatsheet not found'}), 404
 
-@app.route('/api/cheatsheet/<cheatsheet_id>/image', methods=['POST'])
-def upload_image(cheatsheet_id):
-    """Upload an image for a cheatsheet."""
-    # Check if we have a file in the request
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
+        cs.group_id = group_id or None
+        # Also update in the JSON data
+        cs_data = cs.data.copy()
+        cs_data['group'] = group_id
+        cs.data = cs_data
+        db.session.commit()
 
-    file = request.files['file']
-    if not file.filename or file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        return jsonify({'success': True})
 
-    if not allowed_image_file(file.filename):
-        return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp, svg'}), 400
+    @app.route('/api/cheatsheet/<cheatsheet_id>/share', methods=['PUT'])
+    @login_required
+    def toggle_share(cheatsheet_id):
+        """Toggle public sharing for a cheatsheet."""
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return jsonify({'error': 'Cheatsheet not found'}), 404
 
-    # Generate a unique filename
-    original_filename = secure_filename(file.filename) or 'image.png'
-    filename = generate_image_filename(original_filename)
+        cs.is_public = not cs.is_public
+        db.session.commit()
 
-    # Ensure the images directory exists
-    images_dir = ensure_cheatsheet_images_dir(cheatsheet_id)
+        share_url = url_for('shared_cheatsheet', cheatsheet_id=cheatsheet_id, _external=True) if cs.is_public else None
+        return jsonify({
+            'success': True,
+            'is_public': cs.is_public,
+            'share_url': share_url
+        })
 
-    # Save the file
-    file_path = os.path.join(images_dir, filename)
-    file.save(file_path)
+    # ─── Groups API ──────────────────────────────────────────────
 
-    # Return the URL
-    url = f"/images/{cheatsheet_id}/{filename}"
-    return jsonify({
-        'success': True,
-        'url': url,
-        'filename': filename
-    })
+    @app.route('/api/groups', methods=['GET'])
+    @login_required
+    def get_groups():
+        """Get all groups for current user."""
+        groups = Group.query.filter_by(user_id=current_user.id).all()
+        return jsonify([{'id': g.id, 'name': g.name, 'color': g.color} for g in groups])
 
+    @app.route('/api/groups', methods=['POST'])
+    @login_required
+    def create_group():
+        """Create a new group."""
+        data = request.json
+        name = data.get('name', '').strip()
 
-@app.route('/api/cheatsheet/<cheatsheet_id>/image/<filename>', methods=['DELETE'])
-def delete_image(cheatsheet_id, filename):
-    """Delete a specific image from a cheatsheet."""
-    images_dir = get_cheatsheet_images_dir(cheatsheet_id)
-    file_path = os.path.join(images_dir, secure_filename(filename))
+        if not name:
+            return jsonify({'error': 'Group name is required'}), 400
 
-    if os.path.exists(file_path):
-        os.remove(file_path)
+        existing = Group.query.filter_by(user_id=current_user.id).all()
+        if any(g.name.lower() == name.lower() for g in existing):
+            return jsonify({'error': 'Group already exists'}), 400
+
+        group_id = re.sub(r'[^a-zA-Z0-9]', '_', name.lower())[:20]
+        group_id = f"{group_id}_{hashlib.md5(f'{current_user.id}:{name}'.encode()).hexdigest()[:4]}"
+
+        new_group = Group(
+            id=group_id,
+            user_id=current_user.id,
+            name=name,
+            color=data.get('color', '#667eea')
+        )
+        db.session.add(new_group)
+        db.session.commit()
+
+        return jsonify({'success': True, 'group': {'id': group_id, 'name': name, 'color': new_group.color}})
+
+    @app.route('/api/groups/<group_id>', methods=['PUT'])
+    @login_required
+    def update_group(group_id):
+        """Update a group."""
+        data = request.json
+        group = Group.query.filter_by(id=group_id, user_id=current_user.id).first()
+        if not group:
+            return jsonify({'error': 'Group not found'}), 404
+
+        if 'name' in data:
+            group.name = data['name']
+        if 'color' in data:
+            group.color = data['color']
+        db.session.commit()
+
+        return jsonify({'success': True, 'group': {'id': group.id, 'name': group.name, 'color': group.color}})
+
+    @app.route('/api/groups/<group_id>', methods=['DELETE'])
+    @login_required
+    def delete_group(group_id):
+        """Delete a group and unassign all cheatsheets from it."""
+        group = Group.query.filter_by(id=group_id, user_id=current_user.id).first()
+        if not group:
+            return jsonify({'error': 'Group not found'}), 404
+
+        # Unassign cheatsheets (SET NULL handled by FK, but also update JSON data)
+        for cs in Cheatsheet.query.filter_by(group_id=group_id, user_id=current_user.id).all():
+            cs.group_id = None
+            cs_data = cs.data.copy()
+            cs_data['group'] = ''
+            cs.data = cs_data
+
+        db.session.delete(group)
+        db.session.commit()
+
+        return jsonify({'success': True})
+
+    # ─── Images API ──────────────────────────────────────────────
+
+    @app.route('/images/<cheatsheet_id>/<filename>')
+    def serve_image(cheatsheet_id, filename):
+        """Serve an image from the database."""
+        # Check if cheatsheet is public or belongs to current user
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id).first()
+        if not cs:
+            return 'Not found', 404
+
+        if not cs.is_public:
+            if not current_user.is_authenticated or cs.user_id != current_user.id:
+                return 'Not found', 404
+
+        image = Image.query.filter_by(cheatsheet_id=cheatsheet_id, filename=filename).first()
+        if not image:
+            return 'Image not found', 404
+
+        return send_file(BytesIO(image.data), mimetype=image.content_type, download_name=filename)
+
+    @app.route('/api/cheatsheet/<cheatsheet_id>/image', methods=['POST'])
+    @login_required
+    def upload_image(cheatsheet_id):
+        """Upload an image for a cheatsheet."""
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if not file.filename or file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not allowed_image_file(file.filename):
+            return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg, gif, webp, svg'}), 400
+
+        original_filename = secure_filename(file.filename) or 'image.png'
+        filename = generate_image_filename(original_filename)
+        image_data = file.read()
+
+        image = Image(
+            cheatsheet_id=cheatsheet_id,
+            filename=filename,
+            data=image_data,
+            content_type=file.content_type or 'image/png'
+        )
+        db.session.add(image)
+        db.session.commit()
+
+        url = f"/images/{cheatsheet_id}/{filename}"
+        return jsonify({
+            'success': True,
+            'url': url,
+            'filename': filename
+        })
+
+    @app.route('/api/cheatsheet/<cheatsheet_id>/image/<filename>', methods=['DELETE'])
+    @login_required
+    def delete_image(cheatsheet_id, filename):
+        """Delete a specific image from a cheatsheet."""
+        # Verify ownership
+        cs = Cheatsheet.query.filter_by(id=cheatsheet_id, user_id=current_user.id).first()
+        if not cs:
+            return jsonify({'error': 'Cheatsheet not found'}), 404
+
+        image = Image.query.filter_by(cheatsheet_id=cheatsheet_id, filename=filename).first()
+        if not image:
+            return jsonify({'error': 'Image not found'}), 404
+
+        db.session.delete(image)
+        db.session.commit()
         return jsonify({'success': True, 'message': 'Image deleted'})
-    return jsonify({'error': 'Image not found'}), 404
 
+
+# Create app instance
+app = create_app()
 
 if __name__ == '__main__':
     print("CheatSheet Maker running at http://localhost:5000")
-    print("Synchronizing cheatsheets...")
-    sync_cheatsheets()
     app.run(debug=True, port=5000)

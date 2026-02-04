@@ -1,5 +1,37 @@
 /* CheatSheet Maker - Editor Styles */
 
+/* User info bar */
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.user-info .user-name {
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+}
+
+.user-info .logout-link {
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    font-size: 0.8rem;
+    padding: 2px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.user-info .logout-link:hover {
+    color: white;
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.1);
+}
+
 * {
     margin: 0;
     padding: 0;

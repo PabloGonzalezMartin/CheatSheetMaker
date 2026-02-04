@@ -12,6 +12,10 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <h2>CheatSheet Maker</h2>
+                <div class="user-info">
+                    <span class="user-name">{{ current_user.username }}</span>
+                    <a href="{{ url_for('auth.logout') }}" class="logout-link" title="Logout">Logout</a>
+                </div>
                 <button class="btn btn-icon sidebar-toggle" onclick="toggleSidebar()" title="Collapse sidebar">◀</button>
             </div>
             <div class="sidebar-content">

@@ -2,6 +2,38 @@
  * CheatSheet Maker - Frontend JavaScript (Fixed Version)
  */
 
+// Global 401 handler - redirect to login if session expires
+const _originalFetch = window.fetch;
+window.fetch = async function(...args) {
+    const response = await _originalFetch(...args);
+    if (response.status === 401) {
+        window.location.href = '/login';
+    }
+    return response;
+};
+
+// Share cheatsheet toggle
+async function shareCheatsheet() {
+    if (!currentCheatsheet.id) {
+        showNotification('Save the cheatsheet first', 'error');
+        return;
+    }
+    try {
+        const response = await fetch(`/api/cheatsheet/${currentCheatsheet.id}/share`, { method: 'PUT' });
+        const data = await response.json();
+        if (data.success) {
+            if (data.is_public && data.share_url) {
+                await navigator.clipboard.writeText(data.share_url);
+                showNotification('Public link copied to clipboard!', 'success');
+            } else {
+                showNotification('Cheatsheet is now private', 'success');
+            }
+        }
+    } catch (error) {
+        showNotification('Failed to update sharing', 'error');
+    }
+}
+
 // Current cheatsheet state
 let currentCheatsheet = {
     id: null,

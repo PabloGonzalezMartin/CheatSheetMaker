@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - CheatSheet Maker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .auth-card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .auth-card h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+        .auth-card .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #555;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .form-group input:focus {
+            border-color: #667eea;
+        }
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn-submit:hover { opacity: 0.9; }
+        .auth-link {
+            text-align: center;
+            margin-top: 20px;
+            color: #888;
+            font-size: 14px;
+        }
+        .auth-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .auth-link a:hover { text-decoration: underline; }
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        .flash-message {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff0f0;
+            color: #c0392b;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <h1>CheatSheet Maker</h1>
+        <p class="subtitle">Sign in to your account</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash-message">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-submit">Sign In</button>
+        </form>
+
+        <p class="auth-link">
+            Don't have an account? <a href="{{ url_for('auth.register') }}">Create one</a>
+        </p>
+    </div>
+</body>
+</html>
