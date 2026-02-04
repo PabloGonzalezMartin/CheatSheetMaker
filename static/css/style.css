@@ -1,35 +1,41 @@
 /* CheatSheet Maker - Editor Styles */
 
-/* User info bar */
+/* User info bar - pinned at bottom of sidebar */
 .user-info {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    font-size: 0.85rem;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-light);
+    flex-shrink: 0;
 }
 
 .user-info .user-name {
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 500;
+    color: var(--text-dark);
+    font-weight: 600;
+    font-size: 0.85rem;
 }
 
 .user-info .logout-link {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-muted);
     text-decoration: none;
     font-size: 0.8rem;
-    padding: 2px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
+    padding: 4px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
     transition: all 0.2s;
+    background: white;
 }
 
 .user-info .logout-link:hover {
-    color: white;
-    border-color: rgba(255, 255, 255, 0.6);
-    background: rgba(255, 255, 255, 0.1);
+    color: #dc2626;
+    border-color: #fca5a5;
+    background: #fee2e2;
+}
+
+.sidebar.collapsed .user-info {
+    display: none;
 }
 
 * {
@@ -133,7 +139,7 @@ body {
     padding: 20px;
     overflow-y: auto;
     overflow-x: hidden;
-    max-height: calc(100vh - 60px);
+    max-height: calc(100vh - 105px);
 }
 
 .sidebar-content h3 {
