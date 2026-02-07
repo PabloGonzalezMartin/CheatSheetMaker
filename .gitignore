@@ -111,7 +111,6 @@ data/
 ready_cheatsheets/
 cheatsheets/
 images/
-migrations/
 pdf/
 
 
@@ -146,6 +145,8 @@ secrets.json
 # Configuraciones con credenciales
 config.local.*
 credentials.json
+
+
 
 # ============================================
 # CÓMO FUNCIONA .GITIGNORE
