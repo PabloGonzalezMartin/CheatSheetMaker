@@ -66,7 +66,7 @@ docker compose -f "$ROOT\docker-compose.yml" up -d db
 Write-Host "==> Waiting for DB to be healthy..." -ForegroundColor Cyan
 $retries = 20
 for ($i = 0; $i -lt $retries; $i++) {
-    $status = docker inspect --format "{{.State.Health.Status}}" cheatsheetmaker-db 2>$null
+    $status = docker inspect --format "{{.State.Health.Status}}" cheatsheetmaker-db1 2>$null
     if ($status -eq "healthy") {
         Write-Host "    DB is healthy." -ForegroundColor Green
         break
