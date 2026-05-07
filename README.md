@@ -141,6 +141,14 @@ Copy-Item .env.example .env
 Open `.env` in any text editor and fill in your values. Here is a complete example with explanations:
 
 ```env
+# Unique name for this instance — used as prefix for Docker container names
+INSTANCE_NAME=cheatsheetmaker
+
+# Ports — change these if you run multiple instances on the same machine
+DB_PORT=5432
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
+
 # PostgreSQL credentials — used by the database container and the backend
 POSTGRES_USER=cheatsheetmaker
 POSTGRES_PASSWORD=MyStr0ngP@ssword        # <-- change this
@@ -269,6 +277,14 @@ Copy-Item .env.example .env
 Open `.env` and fill in your values. For local development use `localhost` as the database host:
 
 ```env
+# Unique name for this instance — used as prefix for Docker container names
+INSTANCE_NAME=cheatsheetmaker
+
+# Ports — change if running multiple instances on the same machine
+DB_PORT=5432
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
+
 POSTGRES_USER=cheatsheetmaker
 POSTGRES_PASSWORD=MyStr0ngP@ssword
 POSTGRES_DB=cheatsheetmakerdb
@@ -549,10 +565,34 @@ Each section and subsection has an `images` array for attaching images directly 
 
 ---
 
+## Running Multiple Instances
+
+You can run several independent CheatSheetMaker instances on the same machine (e.g. one per project or client). Each instance needs its own `.env` with a unique `INSTANCE_NAME` and non-overlapping ports.
+
+**Example — two instances side by side:**
+
+| | Instance A | Instance B |
+|---|---|---|
+| `INSTANCE_NAME` | `projecta` | `projectb` |
+| `DB_PORT` | `5432` | `5433` |
+| `BACKEND_PORT` | `8000` | `8001` |
+| `FRONTEND_PORT` | `3000` | `3001` |
+| `POSTGRES_DB` | `projecta_db` | `projectb_db` |
+
+Each instance gets its own Docker containers (`projecta-db`, `projecta-backend`, `projecta-frontend`) and its own isolated Postgres volume — they never interfere with each other.
+
+To start an instance, set its `.env` as the active one and run the start script (or `docker compose up`). The containers and ports are fully controlled by `.env`.
+
+---
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `INSTANCE_NAME` | **Yes** | `cheatsheetmaker` | Prefix for Docker container names — must be unique per instance |
+| `DB_PORT` | No | `5432` | Host port mapped to PostgreSQL |
+| `BACKEND_PORT` | No | `8000` | Host port mapped to the FastAPI backend |
+| `FRONTEND_PORT` | No | `3000` | Host port mapped to the Next.js frontend |
 | `SECRET_KEY` | **Yes** | `dev-fallback-key` | JWT signing secret — **change in production** |
 | `DATABASE_URL` | **Yes** | SQLite `./cheatsheetmaker.db` | Full DB connection string |
 | `POSTGRES_USER` | Docker | — | PostgreSQL username |

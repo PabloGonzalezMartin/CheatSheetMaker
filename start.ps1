@@ -63,10 +63,15 @@ Write-Host "    Requirements up to date." -ForegroundColor Green
 Write-Host "==> Starting DB (docker compose)..." -ForegroundColor Cyan
 docker compose -f "$ROOT\docker-compose.yml" up -d db
 
+$instanceName = if ($env:INSTANCE_NAME) { $env:INSTANCE_NAME } else { "cheatsheetmaker" }
+$backendPort  = if ($env:BACKEND_PORT)  { $env:BACKEND_PORT  } else { "8000" }
+$frontendPort = if ($env:FRONTEND_PORT) { $env:FRONTEND_PORT } else { "3000" }
+$dbContainer  = "$instanceName-db"
+
 Write-Host "==> Waiting for DB to be healthy..." -ForegroundColor Cyan
 $retries = 20
 for ($i = 0; $i -lt $retries; $i++) {
-    $status = docker inspect --format "{{.State.Health.Status}}" cheatsheetmaker-db1 2>$null
+    $status = docker inspect --format "{{.State.Health.Status}}" $dbContainer 2>$null
     if ($status -eq "healthy") {
         Write-Host "    DB is healthy." -ForegroundColor Green
         break
@@ -83,7 +88,7 @@ for ($i = 0; $i -lt $retries; $i++) {
 Write-Host "==> Starting backend (uvicorn)..." -ForegroundColor Cyan
 $backendProc = Start-Process `
     -FilePath $venvPython `
-    -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000" `
+    -ArgumentList "-m", "uvicorn", "app.main:app", "--reload", "--host", "0.0.0.0", "--port", $backendPort `
     -WorkingDirectory "$ROOT\backend" `
     -NoNewWindow -PassThru
 
@@ -104,15 +109,16 @@ Write-Host "    Frontend dependencies ready." -ForegroundColor Green
 Write-Host "==> Starting frontend (next dev)..." -ForegroundColor Cyan
 $frontendProc = Start-Process `
     -FilePath "cmd.exe" `
-    -ArgumentList "/c", "npm run dev" `
+    -ArgumentList "/c", "npm run dev -- --port $frontendPort" `
     -WorkingDirectory "$ROOT\frontend" `
     -NoNewWindow -PassThru
 
 Write-Host ""
 Write-Host "Services running:" -ForegroundColor Green
-Write-Host "  DB       -> localhost:5432"
-Write-Host "  Backend  -> http://localhost:8000  (PID $($backendProc.Id))"
-Write-Host "  Frontend -> http://localhost:3000  (PID $($frontendProc.Id))"
+$dbPort = if ($env:DB_PORT) { $env:DB_PORT } else { "5432" }
+Write-Host "  DB       -> localhost:$dbPort"
+Write-Host "  Backend  -> http://localhost:$backendPort  (PID $($backendProc.Id))"
+Write-Host "  Frontend -> http://localhost:$frontendPort  (PID $($frontendProc.Id))"
 Write-Host ""
 Write-Host "Press Ctrl+C to stop all..." -ForegroundColor Yellow
 
