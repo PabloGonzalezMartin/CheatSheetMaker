@@ -1,0 +1,193 @@
+{
+  "title": "Welcome to CheatSheetMaker",
+  "group": "",
+  "sections": [
+    {
+      "title": "Editor Overview",
+      "description": "This is a **section description** — it supports *Markdown* and inline math like $E = mc^2$. Use it to summarise what the section covers.",
+      "images": [],
+      "lines": [
+        { "type": "text", "text": "Sections can have **direct lines** (like this one) before any subsections. Mix code, text, and images freely." },
+        { "type": "code", "command": "Ctrl+Z / Ctrl+Y", "comment": "Undo / Redo" },
+        { "type": "code", "command": "Ctrl+S", "comment": "Save cheatsheet" },
+        { "type": "code", "command": "Ctrl+F", "comment": "Open search" }
+      ],
+      "subsections": [
+        {
+          "title": "Keyboard Shortcuts",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "Ctrl+Z / Ctrl+Y", "comment": "Undo / Redo (50 steps)" },
+            { "type": "code", "command": "Ctrl+S", "comment": "Save" },
+            { "type": "code", "command": "Ctrl+F", "comment": "Search (preview mode)" },
+            { "type": "code", "command": "Drag handle", "comment": "Reorder sections, subsections, lines" }
+          ]
+        },
+        {
+          "title": "Syntax Tokens",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Colour-code your commands with `{method:x}`, `{param:x}`, `{str:x}`:" },
+            { "type": "code", "command": "git {method:commit} {param:-m} {str:'your message'}", "comment": "Coloured command" },
+            { "type": "code", "command": "df.{method:groupby}({param:'col'}).{method:agg}({str:'mean'})", "comment": "Python example" },
+            { "type": "code", "command": "docker {method:run} {param:-d} {param:-p} {str:'8080:80'} {str:'nginx'}", "comment": "Docker example" }
+          ]
+        },
+        {
+          "title": "Text Lines & Markdown",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Text lines render **full Markdown**:" },
+            { "type": "text", "text": "- *Italic*, **bold**, `inline code`" },
+            { "type": "text", "text": "- ~~Strikethrough~~ and [links](https://github.com)" },
+            { "type": "text", "text": "- Tables, blockquotes, task lists via GFM" },
+            { "type": "text", "text": "> 💡 Switch to **Preview** mode to see the rendered output." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "LaTeX & Math Rendering",
+      "description": "Text lines and section descriptions support **inline** math $a^2 + b^2 = c^2$ and **display** math via KaTeX. Works in both Preview and PDF.",
+      "images": [],
+      "lines": [],
+      "subsections": [
+        {
+          "title": "Inline Expressions",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Wrap expressions in `$...$` for inline math:" },
+            { "type": "text", "text": "Euler's identity: $e^{i\\pi} + 1 = 0$" },
+            { "type": "text", "text": "Quadratic formula: $x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$" },
+            { "type": "text", "text": "Probability: $P(A \\mid B) = \\dfrac{P(B \\mid A)\\,P(A)}{P(B)}$" },
+            { "type": "text", "text": "Log identity: $\\log_b(xy) = \\log_b x + \\log_b y$" }
+          ]
+        },
+        {
+          "title": "Display Equations",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Wrap in `$$...$$` for centred display math:" },
+            { "type": "text", "text": "$$\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}$$" },
+            { "type": "text", "text": "$$\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\varepsilon_0}$$" },
+            { "type": "text", "text": "$$\\hat{H}\\,|\\psi\\rangle = i\\hbar\\,\\frac{\\partial}{\\partial t}|\\psi\\rangle$$" }
+          ]
+        },
+        {
+          "title": "Mixed Math & Markdown",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "You can mix **Markdown** and $\\LaTeX$ freely in the same line." },
+            { "type": "text", "text": "The **gradient** of a scalar field $f$ is $\\nabla f = \\left(\\frac{\\partial f}{\\partial x},\\, \\frac{\\partial f}{\\partial y},\\, \\frac{\\partial f}{\\partial z}\\right)$." },
+            { "type": "text", "text": "For a *normal distribution* $X \\sim \\mathcal{N}(\\mu, \\sigma^2)$, the PDF is:" },
+            { "type": "text", "text": "$$f(x) = \\frac{1}{\\sigma\\sqrt{2\\pi}}\\exp\\!\\left(-\\frac{(x-\\mu)^2}{2\\sigma^2}\\right)$$" },
+            { "type": "text", "text": "> 🎯 Open the **PDF** tab to verify KaTeX renders identically in the print output." }
+          ]
+        },
+        {
+          "title": "Linear Algebra",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Matrix multiplication $\\mathbf{C} = \\mathbf{A}\\mathbf{B}$ where $C_{ij} = \\sum_k A_{ik} B_{kj}$" },
+            { "type": "text", "text": "$$\\mathbf{A} = \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}, \\quad \\det(\\mathbf{A}) = ad - bc$$" },
+            { "type": "text", "text": "Eigenvalue equation: $\\mathbf{A}\\mathbf{v} = \\lambda\\mathbf{v}$" },
+            { "type": "text", "text": "SVD decomposition: $\\mathbf{A} = \\mathbf{U}\\,\\mathbf{\\Sigma}\\,\\mathbf{V}^\\top$" }
+          ]
+        },
+        {
+          "title": "Calculus Identities",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Fundamental theorem: $\\int_a^b f'(x)\\,dx = f(b) - f(a)$" },
+            { "type": "text", "text": "Taylor series: $f(x) = \\sum_{n=0}^{\\infty} \\dfrac{f^{(n)}(a)}{n!}(x-a)^n$" },
+            { "type": "text", "text": "$$\\frac{d}{dx}\\left[\\int_a^{g(x)} f(t)\\,dt\\right] = f(g(x))\\cdot g'(x)$$" },
+            { "type": "text", "text": "L'Hôpital: if $\\lim \\frac{f}{g} = \\frac{0}{0}$, then $\\lim \\frac{f}{g} = \\lim \\frac{f'}{g'}$" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Images",
+      "description": "You can embed images in **sections** and **subsections**. Upload them via the 📷 button, or drag-and-drop a file onto the image line.",
+      "images": [],
+      "lines": [
+        { "type": "image", "src": "/MoleculasDemo.jpg", "widthPercent": 100 },
+        { "type": "text", "text": "Images can appear as direct lines inside a section — great for diagrams, screenshots, or reference charts." }
+      ],
+      "subsections": [
+        {
+          "title": "Neural Network Diagram",
+          "images": [],
+          "lines": [
+            { "type": "image", "src": "/NeuronalNetworkDemo.jpg", "widthPercent": 100 },
+            { "type": "text", "text": "Images also work inside **subsections**. Resize them with the width slider that appears when you hover." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Git Quick Reference",
+      "description": "A practical reference for daily Git workflow. Syntax tokens highlight **methods** in red, **params** in orange, and **strings** in green.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "git {method:status}", "comment": "Working tree status" },
+        { "type": "code", "command": "git {method:log} {param:--oneline} {param:--graph}", "comment": "Pretty history" }
+      ],
+      "subsections": [
+        {
+          "title": "Setup",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:config} {param:--global} {param:user.name} {str:'Your Name'}", "comment": "Set identity" },
+            { "type": "code", "command": "git {method:config} {param:--global} {param:user.email} {str:'you@example.com'}", "comment": "Set email" },
+            { "type": "code", "command": "git {method:init}", "comment": "Init repo" },
+            { "type": "code", "command": "git {method:clone} {str:'https://github.com/user/repo.git'}", "comment": "Clone repo" }
+          ]
+        },
+        {
+          "title": "Stage & Commit",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:add} {param:.}", "comment": "Stage all" },
+            { "type": "code", "command": "git {method:add} {param:-p}", "comment": "Stage hunks interactively" },
+            { "type": "code", "command": "git {method:commit} {param:-m} {str:'message'}", "comment": "Commit" },
+            { "type": "code", "command": "git {method:commit} {param:--amend} {param:--no-edit}", "comment": "Amend last commit" },
+            { "type": "code", "command": "git {method:reset} {param:HEAD~1}", "comment": "Undo last commit (keep changes)" }
+          ]
+        },
+        {
+          "title": "Branches",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:switch} {param:-c} {str:'feature/name'}", "comment": "Create & switch branch" },
+            { "type": "code", "command": "git {method:branch} {param:-d} {str:'branch-name'}", "comment": "Delete merged branch" },
+            { "type": "code", "command": "git {method:merge} {param:--no-ff} {str:'feature/name'}", "comment": "Merge (preserve history)" },
+            { "type": "code", "command": "git {method:rebase} {str:'main'}", "comment": "Rebase onto main" },
+            { "type": "code", "command": "git {method:cherry-pick} {str:'<sha>'}", "comment": "Apply single commit" }
+          ]
+        },
+        {
+          "title": "Remote Operations",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:fetch} {param:--prune}", "comment": "Fetch + clean deleted remotes" },
+            { "type": "code", "command": "git {method:pull} {param:--rebase}", "comment": "Pull with rebase" },
+            { "type": "code", "command": "git {method:push} {param:-u} {str:'origin'} {str:'HEAD'}", "comment": "Push & set upstream" },
+            { "type": "code", "command": "git {method:push} {param:--force-with-lease}", "comment": "Safe force push" }
+          ]
+        },
+        {
+          "title": "Stash & Tags",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:stash} {method:push} {param:-m} {str:'wip: description'}", "comment": "Save stash" },
+            { "type": "code", "command": "git {method:stash} {method:pop}", "comment": "Restore latest stash" },
+            { "type": "code", "command": "git {method:stash} {method:list}", "comment": "List all stashes" },
+            { "type": "code", "command": "git {method:tag} {param:-a} {str:'v1.0.0'} {param:-m} {str:'Release v1.0.0'}", "comment": "Annotated tag" },
+            { "type": "code", "command": "git {method:push} {str:'origin'} {param:--tags}", "comment": "Push all tags" }
+          ]
+        }
+      ]
+    }
+  ]
+}

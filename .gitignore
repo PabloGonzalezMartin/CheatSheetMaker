@@ -1,0 +1,189 @@
+# ============================================
+# ARCHIVO .GITIGNORE
+# ============================================
+# Este archivo le dice a Git qué archivos y carpetas NO debe rastrear
+# Cada línea representa un patrón de archivos a ignorar
+# Las líneas que comienzan con # son comentarios
+
+# ============================================
+# ARCHIVOS DEL SISTEMA OPERATIVO
+# ============================================
+
+# Windows - archivos del sistema
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================
+# ENTORNOS VIRTUALES DE PYTHON
+# ============================================
+# Carpetas de entornos virtuales (no se deben versionar)
+venv/
+env/
+ENV/
+.venv/
+virtualenv/
+
+# ============================================
+# DEPENDENCIAS Y PAQUETES
+# ============================================
+
+# Python - archivos compilados y caché
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.next/
+node_modules/
+
+# ============================================
+# ARCHIVOS DE CONSTRUCCIÓN Y DISTRIBUCIÓN
+# ============================================
+
+# Python - carpetas de build y distribución
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# JavaScript/TypeScript - archivos compilados
+*.js.map
+*.min.js
+*.min.css
+
+# ============================================
+# ARCHIVOS DE CONFIGURACIÓN LOCAL
+# ============================================
+
+# Variables de entorno (suelen contener secretos)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Configuración específica del IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~.nib
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# ARCHIVOS DE TESTING Y COBERTURA
+# ============================================
+
+# Cobertura de código
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.pytest_cache/
+
+# ============================================
+# BASES DE DATOS LOCALES
+# ============================================
+
+# SQLite - bases de datos locales
+*.db
+*.sqlite
+*.sqlite3
+data/
+ready_cheatsheets/
+cheatsheets/
+images/
+/pdf/
+
+
+# ============================================
+# LOGS Y ARCHIVOS TEMPORALES
+# ============================================
+
+# Archivos de log
+*.log
+logs/
+*.log.*
+
+# Archivos temporales
+*.tmp
+*.temp
+*.cache
+.temp/
+.tmp/
+
+# ============================================
+# ARCHIVOS SENSIBLES
+# ============================================
+
+# Claves y certificados (NUNCA versionar)
+*.pem
+*.key
+*.cert
+*.crt
+secrets.yml
+secrets.json
+
+# Configuraciones con credenciales
+config.local.*
+credentials.json
+
+
+
+# ============================================
+# CÓMO FUNCIONA .GITIGNORE
+# ============================================
+
+# PATRONES BÁSICOS:
+# archivo.txt          - Ignora archivo específico en cualquier directorio
+# /archivo.txt         - Ignora archivo SOLO en la raíz del repositorio
+# carpeta/             - Ignora toda la carpeta (el / al final es importante)
+# *.log                - Ignora todos los archivos con extensión .log
+# !importante.log      - EXCEPCIÓN: NO ignora este archivo (el ! niega la regla)
+
+# PATRONES AVANZADOS:
+# **/*.txt             - Ignora archivos .txt en cualquier subdirectorio
+# carpeta/**/test      - Ignora carpetas 'test' en cualquier nivel dentro de 'carpeta'
+# ?.txt                - ? representa un solo carácter
+# [abc].txt            - Ignora a.txt, b.txt, c.txt
+
+# EJEMPLO DE EXCEPCIÓN:
+# *.log                - Ignora todos los logs
+# !important.log       - EXCEPTO important.log (se incluirá en el repo)
+
+# ============================================
+# NOTAS IMPORTANTES
+# ============================================
+
+# 1. Si un archivo YA está siendo rastreado por Git, agregarlo aquí NO lo eliminará
+#    Debes usar: git rm --cached nombre_archivo
+#
+# 2. Los cambios en .gitignore solo afectan archivos sin rastrear
+#
+# 3. Puedes tener múltiples .gitignore en diferentes carpetas
+#    Cada uno afecta su directorio y subdirectorios
+#
+# 4. Para ver qué archivos están siendo ignorados:
+#    git status --ignored
+#
+# 5. Para verificar por qué un archivo está siendo ignorado:
+#    git check-ignore -v nombre_archivo

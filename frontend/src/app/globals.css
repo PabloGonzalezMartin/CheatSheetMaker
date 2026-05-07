@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────── */
+:root {
+  --color-method:        #e74c3c;
+  --color-param:         #e67e22;
+  --color-str:           #27ae60;
+  --color-header-dark:   #1e3c72;
+  --color-header-light:  #2a5298;
+  --color-text-accent:   #667eea;
+  --color-command:       #2c3e50;
+  --color-comment:       #6c757d;
+}
+
+/* ── Syntax highlighting (WYSIWYG & preview) ────────────────── */
+.hl-method { color: var(--color-method); font-weight: 500; }
+.hl-param  { color: var(--color-param); }
+.hl-str    { color: var(--color-str); }
+
+/* ── Contenteditable placeholder ────────────────────────────── */
+.command-editor:empty:before {
+  content: attr(data-placeholder);
+  color: #888;
+  pointer-events: none;
+}
+
+/* ── Editor search highlight marks ─────────────────────────── */
+mark.search-hl-editor {
+  background: rgba(255, 213, 0, 0.8);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  outline: 1px solid rgba(200, 160, 0, 0.5);
+}
+
+/* ── Prose overrides for compact editor cells ───────────────── */
+.prose-editor p   { margin-top: 0; margin-bottom: 0; }
+.prose-editor ul,
+.prose-editor ol  { margin-top: 0.25em; margin-bottom: 0.25em; }
+.prose-editor li  { margin-top: 0; margin-bottom: 0; }
+
+/* ── Renderer text line markdown styles ─────────────────────── */
+.renderer-text-line .katex-display {
+  margin-left: calc(-46px + 14px);
+  margin-right: 0;
+  text-align: center;
+}
+.renderer-text-line p          { margin-top: 0; margin-bottom: 0; }
+.renderer-text-line strong     { font-weight: 600; }
+.renderer-text-line em         { font-style: italic; }
+.renderer-text-line code       { font-family: 'Courier New', monospace; font-size: 0.85em; background: rgba(0,0,0,0.06); padding: 0 3px; border-radius: 3px; }
+.renderer-text-line ul         { margin: 0.2em 0; padding-left: 1.2em; list-style: disc; }
+.renderer-text-line ol         { margin: 0.2em 0; padding-left: 1.2em; list-style: decimal; }
+.renderer-text-line li         { margin: 0; }
+.renderer-text-line blockquote { margin: 0; padding-left: 0.5em; border-left: none; color: inherit; font-style: normal; }
+
+/* ── Drag-and-drop animations ───────────────────────────────── */
+@keyframes drop-land {
+  0%   { box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.55), 0 2px 8px rgba(102,126,234,0.25); }
+  100% { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+}
+.drop-landed { animation: drop-land 0.45s ease-out forwards; }
+
+/* ── Renderer index item hover ──────────────────────────────── */
+.index-item:hover { filter: brightness(0.96); }
+
+/* ── Copy button — visible on code line hover ───────────────── */
+.code-line-row:hover .copy-btn { opacity: 1 !important; }
+.copy-btn:hover { background: rgba(0,0,0,0.06) !important; }
+
+/* ── Image lightbox ─────────────────────────────────────────── */
+.img-lightbox-backdrop {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out;
+  animation: lb-in 0.15s ease;
+}
+@keyframes lb-in { from { opacity: 0 } to { opacity: 1 } }
+.img-lightbox-img {
+  max-width: 90vw; max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+  cursor: default;
+  object-fit: contain;
+}
+.img-zoomable { cursor: zoom-in; transition: opacity 0.15s; }
+.img-zoomable:hover { opacity: 0.88; }
+
+/* ── Settings gear animation ────────────────────────────────── */
+@keyframes gear-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.gear-btn svg { animation: gear-spin 3s linear infinite; animation-play-state: paused; }
+.gear-btn:hover svg { animation-play-state: running; }
+
+/* ── Scrollbar styling ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }

@@ -1,0 +1,132 @@
+{
+  "title": "Docker",
+  "group": "DevOps",
+  "sections": [
+    {
+      "title": "Images",
+      "description": "Images are **immutable** read-only templates. Containers are running instances of images.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:docker build} {param:-t} {str:myapp:1.0} {str:.}", "comment": "build from Dockerfile in current dir" },
+        { "type": "code", "command": "{method:docker build} {param:--no-cache} {param:-t} {str:myapp} {str:.}", "comment": "build without cache" },
+        { "type": "code", "command": "{method:docker pull} {str:nginx:alpine}", "comment": "pull image from registry" },
+        { "type": "code", "command": "{method:docker push} {str:myrepo/myapp:1.0}", "comment": "push to registry" },
+        { "type": "code", "command": "{method:docker images}", "comment": "list local images" },
+        { "type": "code", "command": "{method:docker rmi} {str:myapp:1.0}", "comment": "remove image" },
+        { "type": "code", "command": "{method:docker image prune} {param:-a}", "comment": "remove all unused images" },
+        { "type": "code", "command": "{method:docker tag} {str:myapp:1.0} {str:myrepo/myapp:latest}", "comment": "tag image" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Containers",
+      "description": "Key flags: `-d` (detach), `-p` (port), `-v` (volume), `-e` (env var), `--name` (name), `--rm` (auto-remove on exit).",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:docker run} {param:-d} {param:-p} {str:8080:80} {param:--name} {str:web} {str:nginx}", "comment": "run detached, map port" },
+        { "type": "code", "command": "{method:docker run} {param:--rm} {param:-it} {str:ubuntu} {str:bash}", "comment": "interactive, auto-remove" },
+        { "type": "code", "command": "{method:docker run} {param:-e} {str:DB_HOST=localhost} {str:myapp}", "comment": "pass env variable" },
+        { "type": "code", "command": "{method:docker ps}", "comment": "list running containers" },
+        { "type": "code", "command": "{method:docker ps} {param:-a}", "comment": "list all containers (inc. stopped)" },
+        { "type": "code", "command": "{method:docker stop} {str:web}", "comment": "graceful stop (SIGTERM)" },
+        { "type": "code", "command": "{method:docker kill} {str:web}", "comment": "force stop (SIGKILL)" },
+        { "type": "code", "command": "{method:docker rm} {str:web}", "comment": "remove stopped container" },
+        { "type": "code", "command": "{method:docker container prune}", "comment": "remove all stopped containers" }
+      ],
+      "subsections": [
+        {
+          "title": "Inspect & Debug",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "{method:docker logs} {param:-f} {str:web}", "comment": "tail live logs" },
+            { "type": "code", "command": "{method:docker exec} {param:-it} {str:web} {str:bash}", "comment": "open shell inside running container" },
+            { "type": "code", "command": "{method:docker inspect} {str:web}", "comment": "full JSON metadata" },
+            { "type": "code", "command": "{method:docker stats}", "comment": "live CPU/mem usage" },
+            { "type": "code", "command": "{method:docker top} {str:web}", "comment": "processes inside container" },
+            { "type": "code", "command": "{method:docker cp} {str:web:/app/log.txt} {str:./log.txt}", "comment": "copy file from container" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Volumes",
+      "description": "Volumes persist data beyond the container lifecycle. Prefer **named volumes** over bind mounts for portability.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:docker volume create} {str:mydata}", "comment": "create named volume" },
+        { "type": "code", "command": "{method:docker volume ls}", "comment": "list volumes" },
+        { "type": "code", "command": "{method:docker volume inspect} {str:mydata}", "comment": "inspect volume" },
+        { "type": "code", "command": "{method:docker run} {param:-v} {str:mydata:/app/data} {str:myapp}", "comment": "mount named volume" },
+        { "type": "code", "command": "{method:docker run} {param:-v} {str:$(pwd)/data:/app/data} {str:myapp}", "comment": "bind mount (host path)" },
+        { "type": "code", "command": "{method:docker volume prune}", "comment": "remove unused volumes" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Networks",
+      "description": "Containers on the same **user-defined bridge network** can reach each other by name.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:docker network create} {str:mynet}", "comment": "create bridge network" },
+        { "type": "code", "command": "{method:docker network ls}", "comment": "list networks" },
+        { "type": "code", "command": "{method:docker run} {param:--network} {str:mynet} {str:myapp}", "comment": "attach container to network" },
+        { "type": "code", "command": "{method:docker network connect} {str:mynet} {str:web}", "comment": "connect running container" },
+        { "type": "code", "command": "{method:docker network inspect} {str:mynet}", "comment": "see connected containers" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Docker Compose",
+      "description": "Define multi-container apps in `docker-compose.yml`. All services share a default network.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:docker compose up} {param:-d}", "comment": "start all services detached" },
+        { "type": "code", "command": "{method:docker compose up} {param:--build}", "comment": "rebuild images before starting" },
+        { "type": "code", "command": "{method:docker compose down}", "comment": "stop and remove containers" },
+        { "type": "code", "command": "{method:docker compose down} {param:-v}", "comment": "also remove volumes" },
+        { "type": "code", "command": "{method:docker compose logs} {param:-f} {str:backend}", "comment": "tail logs for a service" },
+        { "type": "code", "command": "{method:docker compose exec} {str:backend} {str:bash}", "comment": "shell into service" },
+        { "type": "code", "command": "{method:docker compose ps}", "comment": "list service containers" },
+        { "type": "code", "command": "{method:docker compose restart} {str:backend}", "comment": "restart one service" },
+        { "type": "text", "text": "Use `.env` file at project root to pass environment variables into `docker-compose.yml` with `${VAR_NAME}` syntax." }
+      ],
+      "subsections": [
+        {
+          "title": "Minimal docker-compose.yml",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "```yaml\nservices:\n  db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: secret\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n  backend:\n    build: ./backend\n    ports:\n      - \"8000:8000\"\n    depends_on:\n      - db\nvolumes:\n  pgdata:\n```" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Dockerfile Best Practices",
+      "description": "Each `RUN`/`COPY`/`ADD` creates a layer. Order instructions **least-to-most frequently changed** to maximise cache hits.",
+      "images": [],
+      "lines": [
+        { "type": "text", "text": "1. **Use slim base images**: `python:3.12-slim`, `node:20-alpine`, `nginx:alpine`" },
+        { "type": "text", "text": "2. **Copy dependency files first**, then install, then copy source code — so source changes don't invalidate the install layer." },
+        { "type": "text", "text": "3. **Use `.dockerignore`** to exclude `node_modules/`, `.git/`, `*.pyc`, `__pycache__/`." },
+        { "type": "text", "text": "4. **Multi-stage builds**: compile in one stage, copy only the artifact to a minimal final image." },
+        { "type": "code", "command": "{method:FROM} {str:python:3.12-slim} {method:AS} {str:builder}", "comment": "multi-stage: build stage" },
+        { "type": "code", "command": "{method:COPY} {str:requirements.txt} {str:.}", "comment": "" },
+        { "type": "code", "command": "{method:RUN} pip {method:install} {param:--no-cache-dir} {param:-r} {str:requirements.txt}", "comment": "" },
+        { "type": "code", "command": "{method:FROM} {str:python:3.12-slim}", "comment": "final minimal image" },
+        { "type": "code", "command": "{method:COPY} {param:--from=builder} {str:/app} {str:/app}", "comment": "copy from build stage" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Cleanup",
+      "description": "Docker disk usage grows silently. Run `docker system df` to check.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:docker system df}", "comment": "show disk usage" },
+        { "type": "code", "command": "{method:docker system prune}", "comment": "remove stopped containers, dangling images, unused networks" },
+        { "type": "code", "command": "{method:docker system prune} {param:-a} {param:--volumes}", "comment": "nuclear clean (removes everything unused)" }
+      ],
+      "subsections": []
+    }
+  ]
+}

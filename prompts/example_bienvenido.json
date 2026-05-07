@@ -1,0 +1,193 @@
+{
+  "title": "Bienvenido a CheatSheetMaker",
+  "group": "",
+  "sections": [
+    {
+      "title": "Visión General del Editor",
+      "description": "Esta es una **descripción de sección** — admite *Markdown* y matemáticas en línea como $E = mc^2$. Úsala para resumir qué cubre la sección.",
+      "images": [],
+      "lines": [
+        { "type": "text", "text": "Las secciones pueden tener **líneas directas** (como esta) antes de cualquier subsección. Mezcla código, texto e imágenes libremente." },
+        { "type": "code", "command": "Ctrl+Z / Ctrl+Y", "comment": "Deshacer / Rehacer" },
+        { "type": "code", "command": "Ctrl+S", "comment": "Guardar chuleta" },
+        { "type": "code", "command": "Ctrl+F", "comment": "Abrir búsqueda" }
+      ],
+      "subsections": [
+        {
+          "title": "Atajos de Teclado",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "Ctrl+Z / Ctrl+Y", "comment": "Deshacer / Rehacer (50 pasos)" },
+            { "type": "code", "command": "Ctrl+S", "comment": "Guardar" },
+            { "type": "code", "command": "Ctrl+F", "comment": "Buscar (modo vista previa)" },
+            { "type": "code", "command": "Arrastrar asa", "comment": "Reordenar secciones, subsecciones y líneas" }
+          ]
+        },
+        {
+          "title": "Tokens de Sintaxis",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Colorea tus comandos con `{method:x}`, `{param:x}`, `{str:x}`:" },
+            { "type": "code", "command": "git {method:commit} {param:-m} {str:'tu mensaje'}", "comment": "Comando coloreado" },
+            { "type": "code", "command": "df.{method:groupby}({param:'col'}).{method:agg}({str:'mean'})", "comment": "Ejemplo Python" },
+            { "type": "code", "command": "docker {method:run} {param:-d} {param:-p} {str:'8080:80'} {str:'nginx'}", "comment": "Ejemplo Docker" }
+          ]
+        },
+        {
+          "title": "Líneas de Texto y Markdown",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Las líneas de texto renderizan **Markdown completo**:" },
+            { "type": "text", "text": "- *Cursiva*, **negrita**, `código en línea`" },
+            { "type": "text", "text": "- ~~Tachado~~ y [enlaces](https://github.com)" },
+            { "type": "text", "text": "- Tablas, citas y listas de tareas vía GFM" },
+            { "type": "text", "text": "> 💡 Cambia a modo **Vista previa** para ver el resultado renderizado." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "LaTeX y Renderizado Matemático",
+      "description": "Las líneas de texto y descripciones de sección admiten matemáticas **en línea** $a^2 + b^2 = c^2$ y **en bloque** mediante KaTeX. Funciona tanto en Vista previa como en PDF.",
+      "images": [],
+      "lines": [],
+      "subsections": [
+        {
+          "title": "Expresiones en Línea",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Envuelve expresiones en `$...$` para matemáticas en línea:" },
+            { "type": "text", "text": "Identidad de Euler: $e^{i\\pi} + 1 = 0$" },
+            { "type": "text", "text": "Fórmula cuadrática: $x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$" },
+            { "type": "text", "text": "Probabilidad: $P(A \\mid B) = \\dfrac{P(B \\mid A)\\,P(A)}{P(B)}$" },
+            { "type": "text", "text": "Identidad logarítmica: $\\log_b(xy) = \\log_b x + \\log_b y$" }
+          ]
+        },
+        {
+          "title": "Ecuaciones en Bloque",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Envuelve en `$$...$$` para matemáticas centradas en bloque:" },
+            { "type": "text", "text": "$$\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}$$" },
+            { "type": "text", "text": "$$\\nabla \\cdot \\mathbf{E} = \\frac{\\rho}{\\varepsilon_0}$$" },
+            { "type": "text", "text": "$$\\hat{H}\\,|\\psi\\rangle = i\\hbar\\,\\frac{\\partial}{\\partial t}|\\psi\\rangle$$" }
+          ]
+        },
+        {
+          "title": "Markdown y Matemáticas Mezclados",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Puedes mezclar **Markdown** y $\\LaTeX$ libremente en la misma línea." },
+            { "type": "text", "text": "El **gradiente** de un campo escalar $f$ es $\\nabla f = \\left(\\frac{\\partial f}{\\partial x},\\, \\frac{\\partial f}{\\partial y},\\, \\frac{\\partial f}{\\partial z}\\right)$." },
+            { "type": "text", "text": "Para una *distribución normal* $X \\sim \\mathcal{N}(\\mu, \\sigma^2)$, la PDF es:" },
+            { "type": "text", "text": "$$f(x) = \\frac{1}{\\sigma\\sqrt{2\\pi}}\\exp\\!\\left(-\\frac{(x-\\mu)^2}{2\\sigma^2}\\right)$$" },
+            { "type": "text", "text": "> 🎯 Abre la pestaña **PDF** para verificar que KaTeX se renderiza de forma idéntica en la salida impresa." }
+          ]
+        },
+        {
+          "title": "Álgebra Lineal",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Multiplicación de matrices $\\mathbf{C} = \\mathbf{A}\\mathbf{B}$ donde $C_{ij} = \\sum_k A_{ik} B_{kj}$" },
+            { "type": "text", "text": "$$\\mathbf{A} = \\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}, \\quad \\det(\\mathbf{A}) = ad - bc$$" },
+            { "type": "text", "text": "Ecuación de valores propios: $\\mathbf{A}\\mathbf{v} = \\lambda\\mathbf{v}$" },
+            { "type": "text", "text": "Descomposición SVD: $\\mathbf{A} = \\mathbf{U}\\,\\mathbf{\\Sigma}\\,\\mathbf{V}^\\top$" }
+          ]
+        },
+        {
+          "title": "Identidades de Cálculo",
+          "images": [],
+          "lines": [
+            { "type": "text", "text": "Teorema fundamental: $\\int_a^b f'(x)\\,dx = f(b) - f(a)$" },
+            { "type": "text", "text": "Serie de Taylor: $f(x) = \\sum_{n=0}^{\\infty} \\dfrac{f^{(n)}(a)}{n!}(x-a)^n$" },
+            { "type": "text", "text": "$$\\frac{d}{dx}\\left[\\int_a^{g(x)} f(t)\\,dt\\right] = f(g(x))\\cdot g'(x)$$" },
+            { "type": "text", "text": "L'Hôpital: si $\\lim \\frac{f}{g} = \\frac{0}{0}$, entonces $\\lim \\frac{f}{g} = \\lim \\frac{f'}{g'}$" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Imágenes",
+      "description": "Puedes incrustar imágenes en **secciones** y **subsecciones**. Súbelas con el botón 📷 o arrastra y suelta un archivo sobre la línea de imagen.",
+      "images": [],
+      "lines": [
+        { "type": "image", "src": "/MoleculasDemo.jpg", "widthPercent": 100 },
+        { "type": "text", "text": "Las imágenes pueden aparecer como líneas directas dentro de una sección — ideal para diagramas, capturas de pantalla o gráficos de referencia." }
+      ],
+      "subsections": [
+        {
+          "title": "Diagrama de Red Neuronal",
+          "images": [],
+          "lines": [
+            { "type": "image", "src": "/NeuronalNetworkDemo.jpg", "widthPercent": 100 },
+            { "type": "text", "text": "Las imágenes también funcionan dentro de **subsecciones**. Redimensiónalas con el deslizador de ancho que aparece al pasar el cursor." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Referencia Rápida de Git",
+      "description": "Una referencia práctica para el flujo de trabajo diario con Git. Los tokens de sintaxis resaltan **métodos** en rojo, **parámetros** en naranja y **cadenas** en verde.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "git {method:status}", "comment": "Estado del árbol de trabajo" },
+        { "type": "code", "command": "git {method:log} {param:--oneline} {param:--graph}", "comment": "Historial visual" }
+      ],
+      "subsections": [
+        {
+          "title": "Configuración",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:config} {param:--global} {param:user.name} {str:'Tu Nombre'}", "comment": "Establecer identidad" },
+            { "type": "code", "command": "git {method:config} {param:--global} {param:user.email} {str:'tu@correo.com'}", "comment": "Establecer email" },
+            { "type": "code", "command": "git {method:init}", "comment": "Inicializar repositorio" },
+            { "type": "code", "command": "git {method:clone} {str:'https://github.com/usuario/repo.git'}", "comment": "Clonar repositorio" }
+          ]
+        },
+        {
+          "title": "Preparar y Confirmar",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:add} {param:.}", "comment": "Preparar todo" },
+            { "type": "code", "command": "git {method:add} {param:-p}", "comment": "Preparar fragmentos interactivamente" },
+            { "type": "code", "command": "git {method:commit} {param:-m} {str:'mensaje'}", "comment": "Confirmar" },
+            { "type": "code", "command": "git {method:commit} {param:--amend} {param:--no-edit}", "comment": "Enmendar último commit" },
+            { "type": "code", "command": "git {method:reset} {param:HEAD~1}", "comment": "Deshacer último commit (conservar cambios)" }
+          ]
+        },
+        {
+          "title": "Ramas",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:switch} {param:-c} {str:'feature/nombre'}", "comment": "Crear y cambiar de rama" },
+            { "type": "code", "command": "git {method:branch} {param:-d} {str:'nombre-rama'}", "comment": "Eliminar rama fusionada" },
+            { "type": "code", "command": "git {method:merge} {param:--no-ff} {str:'feature/nombre'}", "comment": "Fusionar (preservar historial)" },
+            { "type": "code", "command": "git {method:rebase} {str:'main'}", "comment": "Rebase sobre main" },
+            { "type": "code", "command": "git {method:cherry-pick} {str:'<sha>'}", "comment": "Aplicar un commit específico" }
+          ]
+        },
+        {
+          "title": "Operaciones Remotas",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:fetch} {param:--prune}", "comment": "Fetch + limpiar remotas eliminadas" },
+            { "type": "code", "command": "git {method:pull} {param:--rebase}", "comment": "Pull con rebase" },
+            { "type": "code", "command": "git {method:push} {param:-u} {str:'origin'} {str:'HEAD'}", "comment": "Push y establecer upstream" },
+            { "type": "code", "command": "git {method:push} {param:--force-with-lease}", "comment": "Push forzado seguro" }
+          ]
+        },
+        {
+          "title": "Stash y Etiquetas",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "git {method:stash} {method:push} {param:-m} {str:'wip: descripción'}", "comment": "Guardar stash" },
+            { "type": "code", "command": "git {method:stash} {method:pop}", "comment": "Restaurar último stash" },
+            { "type": "code", "command": "git {method:stash} {method:list}", "comment": "Listar todos los stashes" },
+            { "type": "code", "command": "git {method:tag} {param:-a} {str:'v1.0.0'} {param:-m} {str:'Versión v1.0.0'}", "comment": "Etiqueta anotada" },
+            { "type": "code", "command": "git {method:push} {str:'origin'} {param:--tags}", "comment": "Subir todas las etiquetas" }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "title": "Pandas",
+  "group": "Python",
+  "sections": [
+    {
+      "title": "Import & Create",
+      "description": "Standard import alias is `pd`. DataFrames are the core structure — a 2D table with labeled axes.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:import} pandas {method:as} {str:pd}", "comment": "standard import" },
+        { "type": "code", "command": "{method:import} numpy {method:as} {str:np}", "comment": "" },
+        { "type": "code", "command": "df = pd.{method:DataFrame}({param:data}, columns={str:['a','b','c']})", "comment": "from dict or list" },
+        { "type": "code", "command": "df = pd.{method:read_csv}({str:'file.csv'}, sep={str:','}, index_col={param:0})", "comment": "from CSV" },
+        { "type": "code", "command": "df = pd.{method:read_excel}({str:'file.xlsx'}, sheet_name={str:'Sheet1'})", "comment": "from Excel" },
+        { "type": "code", "command": "df = pd.{method:read_json}({str:'file.json'})", "comment": "from JSON" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Inspect",
+      "description": "Always start by understanding the shape and types of your data.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "df.{method:head}({param:n})", "comment": "first n rows (default 5)" },
+        { "type": "code", "command": "df.{method:tail}({param:n})", "comment": "last n rows" },
+        { "type": "code", "command": "df.{method:info}()", "comment": "dtypes, nulls, memory" },
+        { "type": "code", "command": "df.{method:describe}()", "comment": "statistics for numeric cols" },
+        { "type": "code", "command": "df.{method:shape}", "comment": "(rows, cols)" },
+        { "type": "code", "command": "df.{method:dtypes}", "comment": "data type per column" },
+        { "type": "code", "command": "df.{method:columns}.tolist()", "comment": "column names as list" },
+        { "type": "code", "command": "df.{method:isnull}().{method:sum}()", "comment": "null count per column" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Select & Filter",
+      "description": "`.loc[]` is label-based; `.iloc[]` is integer position-based.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "df[{str:'col'}]", "comment": "single column → Series" },
+        { "type": "code", "command": "df[[{str:'a'}, {str:'b'}]]", "comment": "multiple columns → DataFrame" },
+        { "type": "code", "command": "df.{method:loc}[{param:row_label}, {str:'col'}]", "comment": "label-based select" },
+        { "type": "code", "command": "df.{method:iloc}[{param:0}:{param:5}, {param:1}:{param:3}]", "comment": "position-based slice" },
+        { "type": "code", "command": "df[df[{str:'age'}] > {param:30}]", "comment": "boolean filter" },
+        { "type": "code", "command": "df[df[{str:'city'}].{method:isin}([{str:'Madrid'}, {str:'Paris'}])]", "comment": "filter by value list" },
+        { "type": "code", "command": "df.{method:query}({str:'age > 30 and city == \"Madrid\"'})", "comment": "query string syntax" },
+        { "type": "text", "text": "Chaining conditions: use `&` (and), `|` (or), `~` (not). Always **wrap each condition in parentheses**: `(df.a > 1) & (df.b < 5)`." }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Transform",
+      "description": "Modify, derive, and reshape data.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "df[{str:'new'}] = df[{str:'a'}] + df[{str:'b'}]", "comment": "add column" },
+        { "type": "code", "command": "df.{method:rename}(columns={{{str:'old'}: {str:'new'}}}, inplace={param:True})", "comment": "rename column" },
+        { "type": "code", "command": "df.{method:drop}(columns=[{str:'col'}], inplace={param:True})", "comment": "drop column" },
+        { "type": "code", "command": "df.{method:assign}(ratio=df[{str:'a'}] / df[{str:'b'}])", "comment": "add col (returns new df)" },
+        { "type": "code", "command": "df[{str:'col'}].{method:apply}({param:func})", "comment": "apply function to series" },
+        { "type": "code", "command": "df.{method:apply}({param:func}, axis={param:1})", "comment": "apply row-wise" },
+        { "type": "code", "command": "df.{method:map}({{{str:'A'}: {param:1}, {str:'B'}: {param:2}}})", "comment": "map values (pandas 2.1+)" }
+      ],
+      "subsections": [
+        {
+          "title": "String operations",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "df[{str:'col'}].{method:str.lower}()", "comment": "lowercase" },
+            { "type": "code", "command": "df[{str:'col'}].{method:str.strip}()", "comment": "trim whitespace" },
+            { "type": "code", "command": "df[{str:'col'}].{method:str.contains}({str:'pattern'}, na={param:False})", "comment": "regex match" },
+            { "type": "code", "command": "df[{str:'col'}].{method:str.replace}({str:'old'}, {str:'new'}, regex={param:True})", "comment": "replace" },
+            { "type": "code", "command": "df[{str:'col'}].{method:str.split}({str:','}, expand={param:True})", "comment": "split into columns" }
+          ]
+        },
+        {
+          "title": "DateTime operations",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "df[{str:'date'}] = pd.{method:to_datetime}(df[{str:'date'}])", "comment": "parse to datetime" },
+            { "type": "code", "command": "df[{str:'date'}].{method:dt.year}", "comment": "extract year" },
+            { "type": "code", "command": "df[{str:'date'}].{method:dt.strftime}({str:'%Y-%m'})", "comment": "format as string" },
+            { "type": "code", "command": "df.{method:resample}({str:'M'}, on={str:'date'}).{method:sum}()", "comment": "resample by month" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "GroupBy & Aggregation",
+      "description": "Split → Apply → Combine. The most powerful pandas pattern.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "df.{method:groupby}({str:'col'}).{method:sum}()", "comment": "group and sum" },
+        { "type": "code", "command": "df.{method:groupby}([{str:'a'}, {str:'b'}]).{method:agg}({{{str:'c'}: {str:'mean'}, {str:'d'}: {str:'sum'}}})", "comment": "multi-col agg" },
+        { "type": "code", "command": "df.{method:groupby}({str:'col'})[{str:'val'}].{method:transform}({str:'mean'})", "comment": "broadcast group mean back" },
+        { "type": "code", "command": "df.{method:pivot_table}(values={str:'val'}, index={str:'row'}, columns={str:'col'}, aggfunc={str:'mean'})", "comment": "pivot" },
+        { "type": "text", "text": "Use `observed=True` in `groupby()` when grouping by categorical columns to avoid deprecated behavior in pandas 2.x." }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Missing Data",
+      "description": "Handle `NaN` values before modelling. $\\text{Missing rate} = \\frac{\\text{NaN count}}{n}$",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "df.{method:dropna}()", "comment": "drop rows with any NaN" },
+        { "type": "code", "command": "df.{method:dropna}(subset=[{str:'col'}], how={str:'all'})", "comment": "drop if specific cols all NaN" },
+        { "type": "code", "command": "df.{method:fillna}({param:0})", "comment": "fill NaN with constant" },
+        { "type": "code", "command": "df.{method:fillna}(df.{method:mean}(numeric_only={param:True}))", "comment": "fill with column mean" },
+        { "type": "code", "command": "df[{str:'col'}].{method:interpolate}(method={str:'linear'})", "comment": "interpolate numerics" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Merge & Join",
+      "description": "Combine DataFrames. Mirrors SQL JOIN semantics.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "pd.{method:merge}(df1, df2, on={str:'id'}, how={str:'inner'})", "comment": "inner join" },
+        { "type": "code", "command": "pd.{method:merge}(df1, df2, on={str:'id'}, how={str:'left'})", "comment": "left join" },
+        { "type": "code", "command": "pd.{method:concat}([df1, df2], ignore_index={param:True})", "comment": "stack rows" },
+        { "type": "code", "command": "pd.{method:concat}([df1, df2], axis={param:1})", "comment": "stack columns" },
+        { "type": "text", "text": "**Merge suffixes**: when both dfs have same col name, use `suffixes=('_left', '_right')` to disambiguate." }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Export",
+      "description": "",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "df.{method:to_csv}({str:'out.csv'}, index={param:False})", "comment": "to CSV" },
+        { "type": "code", "command": "df.{method:to_excel}({str:'out.xlsx'}, sheet_name={str:'Data'}, index={param:False})", "comment": "to Excel" },
+        { "type": "code", "command": "df.{method:to_json}({str:'out.json'}, orient={str:'records'})", "comment": "to JSON records" },
+        { "type": "code", "command": "df.{method:to_parquet}({str:'out.parquet'}, index={param:False})", "comment": "to Parquet (columnar)" }
+      ],
+      "subsections": []
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "title": "Git",
+  "group": "DevOps",
+  "sections": [
+    {
+      "title": "Setup & Config",
+      "description": "Run once per machine. Config is stored in `~/.gitconfig`.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git config} {param:--global} user.name {str:'Your Name'}", "comment": "set username" },
+        { "type": "code", "command": "{method:git config} {param:--global} user.email {str:'you@example.com'}", "comment": "set email" },
+        { "type": "code", "command": "{method:git config} {param:--global} core.editor {str:vim}", "comment": "set default editor" },
+        { "type": "code", "command": "{method:git config} {param:--list}", "comment": "view all config" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Init & Clone",
+      "description": "Start a repo from scratch or from a remote.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git init}", "comment": "init new repo in current dir" },
+        { "type": "code", "command": "{method:git init} {str:my-project}", "comment": "init in new folder" },
+        { "type": "code", "command": "{method:git clone} {str:https://github.com/user/repo.git}", "comment": "clone remote" },
+        { "type": "code", "command": "{method:git clone} {str:url} {param:--depth} {str:1}", "comment": "shallow clone (faster)" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Stage & Commit",
+      "description": "The **staging area** (index) is a snapshot of what will go into the next commit.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git status}", "comment": "show working tree status" },
+        { "type": "code", "command": "{method:git add} {str:file.txt}", "comment": "stage a file" },
+        { "type": "code", "command": "{method:git add} {param:-A}", "comment": "stage all changes" },
+        { "type": "code", "command": "{method:git add} {param:-p}", "comment": "interactive staging (hunk by hunk)" },
+        { "type": "code", "command": "{method:git commit} {param:-m} {str:'feat: add login page'}", "comment": "commit with message" },
+        { "type": "code", "command": "{method:git commit} {param:--amend} {param:--no-edit}", "comment": "amend last commit, keep message" },
+        { "type": "text", "text": "**Conventional commits**: use prefixes like `feat:`, `fix:`, `docs:`, `chore:` for clean history." }
+      ],
+      "subsections": [
+        {
+          "title": "Undo changes",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "{method:git restore} {str:file.txt}", "comment": "discard working dir changes" },
+            { "type": "code", "command": "{method:git restore} {param:--staged} {str:file.txt}", "comment": "unstage a file" },
+            { "type": "code", "command": "{method:git reset} {param:--soft} {str:HEAD~1}", "comment": "undo last commit, keep changes staged" },
+            { "type": "code", "command": "{method:git reset} {param:--hard} {str:HEAD~1}", "comment": "undo last commit, discard changes" },
+            { "type": "text", "text": "**Warning**: `--hard` permanently discards uncommitted work. Use `git stash` instead when unsure." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Branches",
+      "description": "Branches are cheap pointers to commits. Create them freely.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git branch}", "comment": "list local branches" },
+        { "type": "code", "command": "{method:git branch} {str:feature/login}", "comment": "create branch" },
+        { "type": "code", "command": "{method:git switch} {str:feature/login}", "comment": "switch to branch" },
+        { "type": "code", "command": "{method:git switch} {param:-c} {str:feature/login}", "comment": "create and switch" },
+        { "type": "code", "command": "{method:git branch} {param:-d} {str:feature/login}", "comment": "delete merged branch" },
+        { "type": "code", "command": "{method:git branch} {param:-D} {str:feature/login}", "comment": "force delete unmerged branch" }
+      ],
+      "subsections": [
+        {
+          "title": "Merge & Rebase",
+          "images": [],
+          "lines": [
+            { "type": "code", "command": "{method:git merge} {str:feature/login}", "comment": "merge into current branch" },
+            { "type": "code", "command": "{method:git merge} {param:--no-ff} {str:feature/login}", "comment": "merge with explicit commit" },
+            { "type": "code", "command": "{method:git rebase} {str:main}", "comment": "rebase current branch onto main" },
+            { "type": "code", "command": "{method:git rebase} {param:-i} {str:HEAD~3}", "comment": "interactive rebase last 3 commits" },
+            { "type": "text", "text": "Prefer **rebase** for local cleanup, **merge** for integrating shared branches." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Remote",
+      "description": "Working with `origin` and other remotes.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git remote} {param:-v}", "comment": "list remotes" },
+        { "type": "code", "command": "{method:git remote add} {str:origin} {str:url}", "comment": "add remote" },
+        { "type": "code", "command": "{method:git fetch} {str:origin}", "comment": "fetch without merging" },
+        { "type": "code", "command": "{method:git pull} {param:--rebase} {str:origin} {str:main}", "comment": "pull with rebase" },
+        { "type": "code", "command": "{method:git push} {str:origin} {str:feature/login}", "comment": "push branch" },
+        { "type": "code", "command": "{method:git push} {param:--force-with-lease}", "comment": "safe force push" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Stash",
+      "description": "Temporarily shelve changes so you can switch context.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git stash}", "comment": "stash tracked changes" },
+        { "type": "code", "command": "{method:git stash push} {param:-u} {param:-m} {str:'WIP login'}", "comment": "stash including untracked" },
+        { "type": "code", "command": "{method:git stash list}", "comment": "list stashes" },
+        { "type": "code", "command": "{method:git stash pop}", "comment": "apply last stash and drop it" },
+        { "type": "code", "command": "{method:git stash apply} {str:stash@{2}}", "comment": "apply specific stash" },
+        { "type": "code", "command": "{method:git stash drop} {str:stash@{0}}", "comment": "delete stash" }
+      ],
+      "subsections": []
+    },
+    {
+      "title": "Log & Diff",
+      "description": "Inspect history and differences.",
+      "images": [],
+      "lines": [
+        { "type": "code", "command": "{method:git log} {param:--oneline} {param:--graph} {param:--all}", "comment": "visual branch graph" },
+        { "type": "code", "command": "{method:git log} {param:-p} {str:file.txt}", "comment": "history of a file" },
+        { "type": "code", "command": "{method:git diff}", "comment": "unstaged changes" },
+        { "type": "code", "command": "{method:git diff} {param:--staged}", "comment": "staged changes" },
+        { "type": "code", "command": "{method:git blame} {str:file.txt}", "comment": "who changed each line" },
+        { "type": "code", "command": "{method:git shortlog} {param:-sn}", "comment": "commit count by author" }
+      ],
+      "subsections": []
+    }
+  ]
+}
