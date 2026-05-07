@@ -22,31 +22,16 @@ function katexToImage(expr: string, displayMode: boolean, color: string): Promis
   return new Promise((resolve) => {
     let svgStr: string;
     try {
-      // KaTeX SVG output produces pure SVG paths — no foreignObject, so canvas won't be tainted
       svgStr = katex.renderToString(expr, {
         throwOnError: false,
         displayMode,
-        output: "mathml", // mathml is text-only, won't taint
+        output: "htmlAndMathml",
       });
     } catch {
       resolve(null);
       return;
     }
 
-    // We can't use mathml directly. Use SVG output instead.
-    try {
-      svgStr = katex.renderToString(expr, {
-        throwOnError: false,
-        displayMode,
-        output: "svg",
-      });
-    } catch {
-      resolve(null);
-      return;
-    }
-
-    // KaTeX SVG output has no foreignObject — safe to draw on canvas
-    // Set a fill color on the SVG
     svgStr = svgStr.replace(/currentColor/g, color);
 
     const blob = new Blob([svgStr], { type: "image/svg+xml" });
