@@ -126,9 +126,9 @@ function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolve
         return `<div class="text-line" style="background:${color}11;padding:3px 8px;margin:1px 0;border-radius:3px;font-size:7.5pt;color:#2c3e50;line-height:1.2">${renderMd(line.text || "")}</div>`;
       }
       const cmd = renderCmd(line.command || "");
-      const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;float:right;max-width:38%;text-align:right">${escHtml(line.comment)}</span>` : "";
+      const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;flex-shrink:0;max-width:38%;text-align:right;word-break:break-word;white-space:normal;padding-left:8px;align-self:center;line-height:1.3">${escHtml(line.comment)}</span>` : "";
       const rowBg = li % 2 === 0 ? "#f8f9fa" : "#ffffff";
-      return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 8px;color:#2c3e50;background:${rowBg};margin:0">${cmt}<span>${cmd}</span></div>`;
+      return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 8px;color:#2c3e50;background:${rowBg};margin:0;display:flex;align-items:center;overflow:hidden"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cmd}</span>${cmt}</div>`;
     }).join("");
 
     const subsHtml = subs.length === 0 ? "" : (() => {
@@ -147,9 +147,9 @@ function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolve
               return `<div class="text-line" style="padding:3px 6px;font-size:7.5pt;color:#2c3e50;line-height:1.5;background:${color}11;margin:1px 0;border-radius:2px">${renderMd(line.text || "")}</div>`;
             }
             const cmd = renderCmd(line.command || "");
-            const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;float:right">${escHtml(line.comment)}</span>` : "";
+            const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;flex-shrink:0;max-width:38%;text-align:right;word-break:break-word;white-space:normal;padding-left:8px;align-self:center;line-height:1.3">${escHtml(line.comment)}</span>` : "";
             const rowBg = li % 2 === 0 ? "#f8f9fa" : "#ffffff";
-            return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 6px;color:#2c3e50;background:${rowBg};margin:0">${cmt}<span>${cmd}</span></div>`;
+            return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 6px;color:#2c3e50;background:${rowBg};margin:0;display:flex;align-items:center;overflow:hidden"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cmd}</span>${cmt}</div>`;
           }).join("");
           return `<div style="margin-bottom:4px;border:1px solid #e0e0e0;border-left:2px solid ${color};border-radius:3px;overflow:hidden;break-inside:avoid">
             <div style="background:${headerBg};padding:3px 6px;font-size:7pt;font-weight:bold;color:#2c3e50">

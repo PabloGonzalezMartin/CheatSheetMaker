@@ -306,37 +306,36 @@ export function WysiwygSectionCard({
 
         {/* Description — inside header block */}
         <div className="px-12 pb-1.5" onClick={(e) => e.stopPropagation()}>
-          {(editingDesc || !section.description) ? (
-            section.description !== undefined || editingDesc ? (
-              <textarea
-                autoFocus={editingDesc}
-                value={section.description || ""}
-                onChange={(e) => onChange({ ...section, description: e.target.value })}
-                onBlur={() => setEditingDesc(false)}
-                placeholder={t("section_descPlaceholder")}
-                rows={1}
-                className="w-full text-xs text-gray-500 border-0 bg-transparent resize-none focus:outline-none placeholder-gray-300"
-                style={{ minHeight: "20px", lineHeight: 1.5 }}
-                onInput={(e) => {
-                  const el = e.currentTarget;
-                  el.style.height = "auto";
-                  el.style.height = Math.min(el.scrollHeight, 80) + "px";
-                }}
-              />
-            ) : null
-          ) : (
+          {editingDesc ? (
+            <textarea
+              autoFocus
+              value={section.description || ""}
+              onChange={(e) => onChange({ ...section, description: e.target.value })}
+              onBlur={() => setEditingDesc(false)}
+              onKeyDown={(e) => { if (e.key === "Escape") setEditingDesc(false); }}
+              placeholder={t("section_descPlaceholder")}
+              rows={2}
+              className="w-full text-xs text-gray-700 rounded px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+              style={{ minHeight: "36px", lineHeight: 1.5, background: "white", border: "1px solid #d1d5db" }}
+              onInput={(e) => {
+                const el = e.currentTarget;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 80) + "px";
+              }}
+            />
+          ) : section.description ? (
             <div
               onClick={() => setEditingDesc(true)}
-              style={{ fontSize: "0.78rem", color: "#666", lineHeight: 1.5, cursor: "text" }}
-              className="renderer-text-line hover:opacity-80"
               title={t("section_clickEditDesc")}
+              className="group/desc relative rounded px-2 py-0.5 -mx-2 cursor-text hover:bg-black/5 transition-colors"
+              style={{ fontSize: "0.78rem", color: "#555", lineHeight: 1.5 }}
             >
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {section.description!}
+                {section.description}
               </ReactMarkdown>
+              <span className="absolute right-1 top-0.5 text-[9px] text-gray-400 opacity-0 group-hover/desc:opacity-100 transition-opacity select-none">✎</span>
             </div>
-          )}
-          {!section.description && !editingDesc && (
+          ) : (
             <button
               onClick={() => setEditingDesc(true)}
               className="text-[10px] text-gray-300 hover:text-gray-400"

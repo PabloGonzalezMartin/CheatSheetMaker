@@ -6,7 +6,7 @@ import type { RenderedLine } from "@/lib/latexToPng";
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     paddingHorizontal: 6,
     paddingVertical: 2,
     minHeight: 14,
@@ -16,7 +16,8 @@ const styles = StyleSheet.create({
     fontSize: 7,
     flex: 1,
     flexDirection: "row",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
+    overflow: "hidden",
   },
   segment: {
     fontFamily: "Courier",
@@ -32,6 +33,7 @@ const styles = StyleSheet.create({
     maxWidth: "38%",
     flexShrink: 0,
     textAlign: "right",
+    alignSelf: "center",
   },
   textLine: {
     paddingHorizontal: 6,
