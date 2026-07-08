@@ -49,6 +49,93 @@ const styles = StyleSheet.create({
 
 type Segment = { text: string; color: string; bold: boolean };
 
+// ── Markdown table helpers ───────────────────────────────────────
+type TextSegment = { kind: "text"; content: string } | { kind: "table"; headers: string[]; rows: string[][] };
+
+function isSeparatorRow(row: string): boolean {
+  return row.split("|").every((c) => /^\s*:?-+:?\s*$/.test(c.trim()) || c.trim() === "");
+}
+
+function parseRow(l: string): string[] {
+  return l.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+}
+
+export function parseMarkdownTable(text: string): { headers: string[]; rows: string[][] } | null {
+  const lines = text.trim().split("\n").map((l) => l.trim());
+  if (lines.length < 2) return null;
+  const headers = parseRow(lines[0]);
+  if (!isSeparatorRow(lines[1])) return null;
+  const rows = lines.slice(2).filter((l) => l.includes("|")).map(parseRow);
+  return { headers, rows };
+}
+
+export function splitTextSegments(text: string): TextSegment[] {
+  const lines = text.split("\n");
+  const segments: TextSegment[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    // Look ahead: is this line a table header? (next non-empty line must be separator)
+    if (lines[i].trim().includes("|")) {
+      let sepIdx = i + 1;
+      while (sepIdx < lines.length && lines[sepIdx].trim() === "") sepIdx++;
+      if (sepIdx < lines.length && isSeparatorRow(lines[sepIdx])) {
+        const headers = parseRow(lines[i]);
+        const tableLines: string[] = [];
+        let j = sepIdx + 1;
+        while (j < lines.length && (lines[j].trim().includes("|") || lines[j].trim() === "")) {
+          if (lines[j].trim().includes("|")) tableLines.push(lines[j]);
+          j++;
+        }
+        segments.push({ kind: "table", headers, rows: tableLines.map(parseRow) });
+        i = j;
+        continue;
+      }
+    }
+    // Accumulate plain text lines
+    let textLines = "";
+    while (i < lines.length && !(lines[i].trim().includes("|") && i + 1 < lines.length && isSeparatorRow(lines[i + 1]))) {
+      textLines += (textLines ? "\n" : "") + lines[i];
+      i++;
+    }
+    if (textLines.trim()) segments.push({ kind: "text", content: textLines });
+  }
+  return segments;
+}
+
+export function stripInlineMarkdown(s: string): string {
+  return s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/[^\x00-\x7F]/g, "");
+}
+
+export function PdfMarkdownTable({ headers, rows, accentColor }: { headers: string[]; rows: string[][]; accentColor: string }) {
+  const borderColor = "#c8cdd4";
+  const colCount = headers.length;
+  const colWidth = `${(100 / colCount).toFixed(1)}%`;
+  const cellBase = { fontSize: 6.5, color: "#2c3e50", paddingHorizontal: 4, paddingVertical: 2 };
+
+  return (
+    <View style={{ marginVertical: 3, borderWidth: 1, borderColor }}>
+      {/* Header row */}
+      <View style={{ flexDirection: "row", backgroundColor: accentColor + "22" }}>
+        {headers.map((h, i) => (
+          <View key={i} style={{ width: colWidth, borderRightWidth: i < colCount - 1 ? 1 : 0, borderRightColor: borderColor, borderBottomWidth: 1, borderBottomColor: borderColor }}>
+            <Text style={{ ...cellBase, fontFamily: "Helvetica-Bold" }}>{stripInlineMarkdown(h)}</Text>
+          </View>
+        ))}
+      </View>
+      {/* Data rows */}
+      {rows.map((row, ri) => (
+        <View key={ri} style={{ flexDirection: "row", backgroundColor: ri % 2 === 0 ? "#ffffff" : "#f6f7f8" }}>
+          {headers.map((_, ci) => (
+            <View key={ci} style={{ width: colWidth, borderRightWidth: ci < colCount - 1 ? 1 : 0, borderRightColor: borderColor, borderBottomWidth: ri < rows.length - 1 ? 1 : 0, borderBottomColor: borderColor }}>
+              <Text style={cellBase}>{stripInlineMarkdown(row[ci] ?? "")}</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function parseSyntax(command: string): Segment[] {
   const segments: Segment[] = [];
   const pattern = /\{(method|param|str):([^}]+)\}/g;
@@ -100,6 +187,25 @@ export function PdfCodeLine({ line, index, accentColor = "#667eea", resolvedSrcs
 
   if (line.type === "text") {
     const text = line.text || "";
+    const segs = splitTextSegments(text);
+    const hasTable = segs.some((s) => s.kind === "table");
+
+    if (hasTable) {
+      return (
+        <View style={[styles.textLine, { backgroundColor: accentColor + "08" }]}>
+          {segs.map((seg, si) =>
+            seg.kind === "table" ? (
+              <PdfMarkdownTable key={si} headers={seg.headers} rows={seg.rows} accentColor={accentColor} />
+            ) : seg.content.trim() ? (
+              <Text key={si} style={[styles.textContent, { marginBottom: 2 }]}>
+                {stripInlineMarkdown(seg.content)}
+              </Text>
+            ) : null
+          )}
+        </View>
+      );
+    }
+
     const hasLatex = /\$/.test(text);
 
     if (hasLatex) {

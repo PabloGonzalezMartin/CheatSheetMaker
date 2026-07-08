@@ -55,11 +55,20 @@ export function WysiwygSectionCard({
 
   // Subsection drag state
   const [dragSrcSubIdx, setDragSrcSubIdx] = useState<number | null>(null);
-  const [dragOverSubIdx, setDragOverSubIdx] = useState<number | null>(null);
+  const [dropInsertIdx, setDropInsertIdx] = useState<number | null>(null);
   const [landedSubIdx, setLandedSubIdx] = useState<number | null>(null);
   const landedSubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Subsection resize state
+  const [resizingIdx, setResizingIdx] = useState<number | null>(null);
+  const subsRowRef = useRef<HTMLDivElement>(null);
+  // Stable ref to always-current subsections — fixes stale closure in resize handler
+  const subsRef = useRef(section.subsections);
+
   const outerRef = useRef<HTMLDivElement>(null);
+
+  // Keep subsRef current so resize closure always reads latest widths
+  useEffect(() => { subsRef.current = section.subsections; }, [section.subsections]);
 
   // Keep store in sync with local collapse state
   useEffect(() => {
@@ -156,11 +165,20 @@ export function WysiwygSectionCard({
     updateLines(next);
   };
 
-  const addSubsection = () =>
-    updateSubsections([
-      ...section.subsections,
-      { _uiId: crypto.randomUUID(), title: "", images: [], lines: [] },
-    ]);
+  const addSubsection = () => {
+    const cur = subsRef.current;
+    if (cur.length === 0) {
+      // Default to 3 equal columns in one row
+      updateSubsections([
+        { _uiId: crypto.randomUUID(), title: "", images: [], lines: [], widthPercent: 33.3 },
+        { _uiId: crypto.randomUUID(), title: "", images: [], lines: [], widthPercent: 33.3 },
+        { _uiId: crypto.randomUUID(), title: "", images: [], lines: [], widthPercent: 33.4 },
+      ]);
+    } else {
+      // Just append — buildRows will chunk into rows of 3 at render time
+      updateSubsections([...cur, { _uiId: crypto.randomUUID(), title: "", images: [], lines: [] }]);
+    }
+  };
 
   const removeSubsection = (idx: number) => updateSubsections(section.subsections.filter((_, i) => i !== idx));
 
@@ -187,21 +205,222 @@ export function WysiwygSectionCard({
     updateLines(next);
   };
 
-  const handleSubDrop = (e: React.DragEvent, targetIdx: number) => {
+  const handleSubDrop = (e: React.DragEvent, insertBefore: number) => {
     e.preventDefault();
-    setDragOverSubIdx(null);
+    setDropInsertIdx(null);
     setDragSrcSubIdx(null);
     const srcIdx = Number(e.dataTransfer.getData("subIndex"));
-    if (isNaN(srcIdx) || srcIdx === targetIdx) return;
+    if (isNaN(srcIdx)) return;
     e.stopPropagation();
     const next = [...section.subsections];
     const [moved] = next.splice(srcIdx, 1);
-    const adjusted = srcIdx < targetIdx ? targetIdx - 1 : targetIdx;
+    const adjusted = srcIdx < insertBefore ? insertBefore - 1 : insertBefore;
     next.splice(adjusted, 0, moved);
     if (landedSubTimer.current) clearTimeout(landedSubTimer.current);
     setLandedSubIdx(adjusted);
     landedSubTimer.current = setTimeout(() => setLandedSubIdx(null), 500);
     updateSubsections(next);
+  };
+
+  // Rows respect rowBreak flags; also auto-break at 3 items.
+  function buildRows(subs: Subsection[]): { sub: Subsection; globalIdx: number }[][] {
+    const rows: { sub: Subsection; globalIdx: number }[][] = [];
+    let current: { sub: Subsection; globalIdx: number }[] = [];
+    for (let i = 0; i < subs.length; i++) {
+      if (subs[i].rowBreak && current.length > 0) { rows.push(current); current = []; }
+      current.push({ sub: subs[i], globalIdx: i });
+      if (current.length === 3) { rows.push(current); current = []; }
+    }
+    if (current.length > 0) rows.push(current);
+    return rows;
+  }
+
+  // Row-1 widths from widthPercent on row-1 items; equal-share for any without.
+  function getRow1Widths(subs: Subsection[]): number[] {
+    const row1 = (buildRows(subs)[0] ?? []).map(r => r.sub);
+    const assigned = row1.map((s) => s.widthPercent ?? null);
+    const fixedTotal = assigned.reduce<number>((sum, w) => sum + (w ?? 0), 0);
+    const freeCount = assigned.filter((w) => w === null).length;
+    const freeW = freeCount > 0 ? Math.max(10, (100 - fixedTotal) / freeCount) : 0;
+    return assigned.map((w) => (w !== null ? w : freeW));
+  }
+
+  // Normalize row-1 widths to sum to 100 and persist.
+  function normalizeRow1(subs: Subsection[]): Subsection[] {
+    const rows = buildRows(subs);
+    const row1 = rows[0] ?? [];
+    const widths = getRow1Widths(subs);
+    const total = widths.reduce((s, w) => s + w, 0);
+    return subs.map((s, i) => {
+      const riPos = row1.findIndex(r => r.globalIdx === i);
+      if (riPos === -1) return s;
+      return { ...s, widthPercent: total > 0 ? Math.round((widths[riPos] / total) * 1000) / 10 : Math.round(1000 / row1.length) / 10 };
+    });
+  }
+
+  // Strip widthPercent from row-1 items so they get equal shares after a structural change.
+  function equalizeRow1(subs: Subsection[]): Subsection[] {
+    const row1Indices = new Set((buildRows(subs)[0] ?? []).map(r => r.globalIdx));
+    return subs.map((s, i) => row1Indices.has(i) ? { ...s, widthPercent: undefined } : s);
+  }
+
+  // ↵: start a new row at globalIdx. Items that follow it in its current row join it.
+  // Clears rowBreak from up to 2 items after globalIdx so they join the new row.
+  const sendToNewRow = (globalIdx: number) => {
+    const subs = subsRef.current.map((s, i) => {
+      if (i === globalIdx) return { ...s, rowBreak: true };
+      if (i > globalIdx && i <= globalIdx + 2) return { ...s, rowBreak: undefined };
+      return s;
+    });
+    updateSubsections(equalizeRow1(subs));
+  };
+
+  // ↑: merge the first item of a row back into the previous row.
+  // If the merged row would have < 3 items, the item that follows in the same row needs
+  // an explicit rowBreak so it stays as its own row (otherwise buildRows would absorb it).
+  const mergeRowUp = (globalIdx: number) => {
+    const rows = buildRows(subsRef.current);
+    const rowIdx = rows.findIndex(r => r.some(x => x.globalIdx === globalIdx));
+    if (rowIdx <= 0) return;
+    const thisRow = rows[rowIdx];
+    const prevRow = rows[rowIdx - 1];
+    const colInRow = thisRow.findIndex(x => x.globalIdx === globalIdx);
+    // After pulling idx into prevRow, how many items will the merged row have?
+    const mergedLen = prevRow.length + 1;
+    // The next item in this row (if any) needs rowBreak only when mergedLen < 3,
+    // because otherwise it would auto-break naturally via the max-3 rule.
+    const nextGlobalIdx = colInRow + 1 < thisRow.length ? thisRow[colInRow + 1].globalIdx : -1;
+    const needsExplicitBreak = nextGlobalIdx !== -1 && mergedLen < 3;
+    const subs = subsRef.current.map((s, i) => {
+      if (i === globalIdx) return { ...s, rowBreak: undefined };
+      if (needsExplicitBreak && i === nextGlobalIdx) return { ...s, rowBreak: true };
+      return s;
+    });
+    updateSubsections(equalizeRow1(subs));
+  };
+
+  // rightIndices: columns to the right that absorb the change proportionally.
+  // initLeftWidth / initRightWidths: caller supplies the widths so any row can be resized.
+  // When the rightmost wraps, the drag re-anchors and continues with the remaining right cols.
+  const handleResizeMouseDown = (
+    e: React.MouseEvent,
+    leftIdx: number,
+    initialRightIndices: number[],
+    initLeftWidth: number,
+    initRightWidthsArg: number[],
+  ) => {
+    e.preventDefault();
+    const containerWidth = subsRowRef.current?.getBoundingClientRect().width ?? 800;
+    const WRAP_THRESHOLD = 15;
+
+    let anchorX = e.clientX;
+    let anchorLeftWidth = initLeftWidth;
+    let rightIndices = [...initialRightIndices];
+    // Explicit widths — never read from subsRef after an async state update (stale-closure risk)
+    let anchorRightWidths = [...initRightWidthsArg];
+
+    setResizingIdx(leftIdx);
+
+    const cleanup = () => {
+      setResizingIdx(null);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    const reanchor = (mouseX: number, newLeft: number, newRightIndices: number[], newRightWidths: number[]) => {
+      anchorX = mouseX;
+      anchorLeftWidth = newLeft;
+      rightIndices = newRightIndices;
+      anchorRightWidths = newRightWidths;
+    };
+
+    const onMouseMove = (me: MouseEvent) => {
+      const delta = ((me.clientX - anchorX) / containerWidth) * 100;
+      const startR = anchorRightWidths.reduce((s, w) => s + w, 0);
+      const sumLR = anchorLeftWidth + startR;
+      const rawL = anchorLeftWidth + delta;
+
+      // Wrap left column if it shrinks below threshold
+      if (rawL < WRAP_THRESHOLD && anchorLeftWidth >= WRAP_THRESHOLD) {
+        const next = subsRef.current.map((s, i) => {
+          if (i === leftIdx) return { ...s, rowBreak: true };
+          if (i > leftIdx && i <= leftIdx + 2) return { ...s, rowBreak: undefined };
+          return s;
+        });
+        updateSubsections(equalizeRow1(next));
+        cleanup();
+        return;
+      }
+
+      // Waterfall: rightmost column absorbs all shrinkage first (B stays fixed until C exhausted)
+      const newRightWidths = [...anchorRightWidths];
+      let remaining = delta;
+      for (let i = newRightWidths.length - 1; i >= 0 && remaining !== 0; i--) {
+        if (remaining > 0) {
+          const canGive = Math.max(0, newRightWidths[i] - WRAP_THRESHOLD);
+          const take = Math.min(remaining, canGive);
+          newRightWidths[i] -= take;
+          remaining -= take;
+        } else {
+          newRightWidths[i] -= remaining;
+          remaining = 0;
+        }
+      }
+
+      const rightmostPos = rightIndices.length - 1;
+
+      if (newRightWidths[rightmostPos] <= WRAP_THRESHOLD) {
+        if (rightIndices.length > 1) {
+          // C wraps. wrappedL = how far A grew to exhaust C = anchorL + (C_anchor - threshold)
+          const wrappedL = anchorLeftWidth + anchorRightWidths[rightmostPos] - WRAP_THRESHOLD;
+          const wrapIdx = rightIndices[rightmostPos];
+          const newRightIndices = rightIndices.slice(0, rightmostPos);
+          const remainingSum = anchorRightWidths.slice(0, rightmostPos).reduce((s, w) => s + w, 0);
+          const fillRatio = remainingSum > 0 ? (sumLR - wrappedL) / remainingSum : 1;
+          const filledWidths = anchorRightWidths.slice(0, rightmostPos).map((w) => w * fillRatio);
+          const next = subsRef.current.map((s, i) => {
+            if (i === leftIdx) return { ...s, widthPercent: Math.round(wrappedL * 10) / 10 };
+            const riPos = newRightIndices.indexOf(i);
+            if (riPos !== -1) return { ...s, widthPercent: Math.round(filledWidths[riPos] * 10) / 10 };
+            if (i === wrapIdx) return { ...s, rowBreak: true };
+            if (i > wrapIdx && i <= wrapIdx + 2) return { ...s, rowBreak: undefined };
+            return s;
+          });
+          updateSubsections(next);
+          reanchor(me.clientX, wrappedL, newRightIndices, filledWidths);
+          return;
+        } else {
+          // Last right column (B) wraps — drag ends
+          const wrapIdx = rightIndices[0];
+          const next = subsRef.current.map((s, i) => {
+            if (i === wrapIdx) return { ...s, rowBreak: true };
+            if (i > wrapIdx && i <= wrapIdx + 2) return { ...s, rowBreak: undefined };
+            return s;
+          });
+          updateSubsections(equalizeRow1(next));
+          cleanup();
+          return;
+        }
+      }
+
+      // Normal live update
+      const newL = Math.max(WRAP_THRESHOLD, Math.min(sumLR - WRAP_THRESHOLD * rightIndices.length, rawL));
+      const next = subsRef.current.map((s, i) => {
+        if (i === leftIdx) return { ...s, widthPercent: Math.round(newL * 10) / 10 };
+        const riPos = rightIndices.indexOf(i);
+        if (riPos !== -1) return { ...s, widthPercent: Math.round(newRightWidths[riPos] * 10) / 10 };
+        return s;
+      });
+      updateSubsections(next);
+    };
+
+    const onMouseUp = () => {
+      cleanup();
+      updateSubsections(normalizeRow1(subsRef.current));
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
   };
 
   return (
@@ -316,7 +535,7 @@ export function WysiwygSectionCard({
               placeholder={t("section_descPlaceholder")}
               rows={2}
               className="w-full text-xs text-gray-700 rounded px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-              style={{ minHeight: "36px", lineHeight: 1.5, background: "white", border: "1px solid #d1d5db" }}
+              style={{ minHeight: "10px", lineHeight: 1, background: "white", border: "1px solid #d1d5db" }}
               onInput={(e) => {
                 const el = e.currentTarget;
                 el.style.height = "auto";
@@ -327,7 +546,7 @@ export function WysiwygSectionCard({
             <div
               onClick={() => setEditingDesc(true)}
               title={t("section_clickEditDesc")}
-              className="group/desc relative rounded px-2 py-0.5 -mx-2 cursor-text hover:bg-black/5 transition-colors"
+              className="group/desc relative rounded px-2 py-0.5 -mx-2 cursor-text hover:bg-black/5 transition-colors renderer-text-line"
               style={{ fontSize: "0.78rem", color: "#555", lineHeight: 1.5 }}
             >
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
@@ -456,7 +675,7 @@ export function WysiwygSectionCard({
           {/* Subsections */}
           {section.subsections.length > 0 && (
             <>
-            {/* Per-section subsection expand/collapse controls */}
+            {/* Per-section subsection toolbar */}
             <div className="flex items-center gap-1 mt-2 mb-1 pt-1 border-t border-gray-100">
               <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mr-0.5">{t("section_subsections")}</span>
               <button
@@ -479,84 +698,210 @@ export function WysiwygSectionCard({
                 </svg>
                 {t("section_all")}
               </button>
+              {/* Reset widths button — only visible when any subsection has a custom width */}
+              {section.subsections.some((s) => s.widthPercent != null) && (
+                <button
+                  onClick={() => {
+                    // Strip all width overrides — row1Widths will default to equal shares
+                    updateSubsections(subsRef.current.map((s) => {
+                      const { widthPercent: _w, colStart: _c, ...rest } = s;
+                      return rest as Subsection;
+                    }));
+                  }}
+                  className="flex items-center gap-0.5 text-[9px] text-gray-400 hover:text-orange-500 border border-gray-200 hover:border-orange-300 rounded px-1.5 py-0.5 transition-colors ml-auto"
+                  title="Reset all subsection widths to equal"
+                >
+                  <svg className="w-2 h-2" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M1 5a4 4 0 1 0 4-4"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M1 2v3h3"/>
+                  </svg>
+                  Reset widths
+                </button>
+              )}
             </div>
+
+            {/* Subsection grid — rowBreak flags define row boundaries, auto-break at 3 */}
             {(() => {
-                const numCols = section.subsections.length >= 3 ? 3 : section.subsections.length;
+              const subs = section.subsections;
+              const GAP = 6;
+              const rows = buildRows(subs);
+              const row1 = rows[0] ?? [];
+              const row1Widths = getRow1Widths(subs);
+
+              // Compute display widths for any row (equal-share for items without widthPercent)
+              const getWidthsForRow = (row: typeof rows[0]): number[] => {
+                const assigned = row.map(r => r.sub.widthPercent ?? null);
+                const fixedTotal = assigned.reduce<number>((s, w) => s + (w ?? 0), 0);
+                const freeCount = assigned.filter(w => w === null).length;
+                const freeW = freeCount > 0 ? Math.max(10, (100 - fixedTotal) / freeCount) : 0;
+                return assigned.map(w => w !== null ? w : freeW);
+              };
+
+              const renderCard = (
+                sub: Subsection,
+                globalIdx: number,
+                colIdx: number,
+                currentRow: typeof rows[0],
+                rowWidths: number[],
+                hideResizeHandle = false,
+              ) => {
+                const isLastInRow = colIdx === currentRow.length - 1;
+                // ↵ shown when item has a predecessor in its row (colIdx > 0)
+                const canSendToNewRow = colIdx > 0;
+                // ↑ shown when item explicitly starts a new row via rowBreak flag
+                const canMergeRowUp = sub.rowBreak === true;
+                const isSubDragging = dragSrcSubIdx === globalIdx;
+                const hasSubLanded = landedSubIdx === globalIdx;
+                const showDropBefore = dropInsertIdx === globalIdx && dragSrcSubIdx !== globalIdx;
+                const showDropAfter = dropInsertIdx === subs.length && globalIdx === subs.length - 1 && dragSrcSubIdx !== globalIdx;
                 return (
-                  <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginTop: "4px" }}>
-                    {Array.from({ length: numCols }, (_, cIdx) => (
-                      <div key={cIdx} style={{ flex: 1, minWidth: 0 }}>
-                        {section.subsections.filter((_, i) => i % numCols === cIdx).map((sub) => {
-                          const sIdx = section.subsections.indexOf(sub);
-                          const isSubDragging = dragSrcSubIdx === sIdx;
-                          const isSubTarget = dragOverSubIdx === sIdx && dragSrcSubIdx !== sIdx;
-                          const hasSubLanded = landedSubIdx === sIdx;
-                          return (
-                            <div
-                              key={sub._uiId ?? sIdx}
-                              className="relative"
-                              style={{ marginBottom: "6px" }}
-                              onDragOver={(e) => {
-                                if (!e.dataTransfer.types.includes("subindex")) return;
-                                e.preventDefault();
-                                if (dragOverSubIdx !== sIdx) setDragOverSubIdx(sIdx);
-                              }}
-                              onDragLeave={(e) => {
-                                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                  setDragOverSubIdx((prev) => (prev === sIdx ? null : prev));
-                                }
-                              }}
-                              onDrop={(e) => handleSubDrop(e, sIdx)}
-                            >
-                              <div
-                                style={{
-                                  height: isSubTarget ? "32px" : "0px",
-                                  borderRadius: "6px",
-                                  marginBottom: isSubTarget ? "4px" : "0",
-                                  background: isSubTarget ? `${color.badgeColor}10` : "transparent",
-                                  border: isSubTarget ? `1.5px dashed ${color.badgeColor}60` : "1.5px dashed transparent",
-                                  transition: "height 0.15s ease, margin-bottom 0.15s ease, background 0.1s ease",
-                                  overflow: "hidden",
-                                }}
-                              />
-                              <div
-                                style={{
-                                  opacity: isSubDragging ? 0.35 : 1,
-                                  transform: isSubDragging ? "scale(0.97)" : "scale(1)",
-                                  transition: "opacity 0.12s ease, transform 0.12s ease",
-                                }}
-                                className={hasSubLanded ? "drop-landed" : ""}
-                              >
-                                <WysiwygSubsectionCard
-                                  subsection={sub}
-                                  sectionIndex={index}
-                                  subsectionIndex={sIdx}
-                                  color={color}
-                                  cheatsheetId={cheatsheetId}
-                                  onChange={(s) => updateSubsection(sIdx, s)}
-                                  onRemove={() => removeSubsection(sIdx)}
-                                  dragHandleProps={{
-                                    draggable: true,
-                                    onDragStart: (e: React.DragEvent) => {
-                                      e.dataTransfer.setData("subIndex", String(sIdx));
-                                      e.dataTransfer.effectAllowed = "move";
-                                      setTimeout(() => setDragSrcSubIdx(sIdx), 0);
-                                    },
-                                    onDragEnd: () => {
-                                      setDragSrcSubIdx(null);
-                                      setDragOverSubIdx(null);
-                                    },
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          );
+                  <div
+                    key={sub._uiId ?? globalIdx}
+                    data-sub-card
+                    style={{ position: "relative", minWidth: "80px", opacity: isSubDragging ? 0.35 : 1, transform: isSubDragging ? "scale(0.97)" : "scale(1)", transition: "opacity 0.12s ease, transform 0.12s ease" }}
+                    className={hasSubLanded ? "drop-landed" : ""}
+                    onDragOver={(e) => {
+                      if (!e.dataTransfer.types.includes("subindex")) return;
+                      e.preventDefault();
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      const insertIdx = e.clientX < rect.left + rect.width / 2 ? globalIdx : globalIdx + 1;
+                      if (dropInsertIdx !== insertIdx) setDropInsertIdx(insertIdx);
+                    }}
+                    onDrop={(e) => { if (!e.dataTransfer.types.includes("subindex")) return; handleSubDrop(e, dropInsertIdx ?? subs.length); }}
+                  >
+                    {showDropBefore && <div style={{ position: "absolute", left: -4, top: 0, bottom: 0, width: 3, background: color.badgeColor, borderRadius: 2, zIndex: 10, boxShadow: `0 0 6px ${color.badgeColor}80` }} />}
+                    {showDropAfter && <div style={{ position: "absolute", right: -4, top: 0, bottom: 0, width: 3, background: color.badgeColor, borderRadius: 2, zIndex: 10, boxShadow: `0 0 6px ${color.badgeColor}80` }} />}
+                    <WysiwygSubsectionCard
+                      subsection={sub}
+                      sectionIndex={index}
+                      subsectionIndex={globalIdx}
+                      color={color}
+                      cheatsheetId={cheatsheetId}
+                      onChange={(s) => updateSubsection(globalIdx, s)}
+                      onRemove={() => removeSubsection(globalIdx)}
+                      dragHandleProps={{
+                        draggable: true,
+                        onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData("subIndex", String(globalIdx)); e.dataTransfer.effectAllowed = "move"; setTimeout(() => setDragSrcSubIdx(globalIdx), 0); },
+                        onDragEnd: () => { setDragSrcSubIdx(null); setDropInsertIdx(null); },
+                      }}
+                      onSendToNewRow={canSendToNewRow ? () => sendToNewRow(globalIdx) : undefined}
+                      onMergeRowUp={canMergeRowUp ? () => mergeRowUp(globalIdx) : undefined}
+                    />
+                    {!isLastInRow && !hideResizeHandle && (
+                      <div
+                        onMouseDown={(e) => {
+                          // All columns to the right absorb change proportionally (waterfall)
+                          const rightEntries = currentRow.slice(colIdx + 1);
+                          const rightIds = rightEntries.map(r => r.globalIdx);
+                          const rightWidths = rightEntries.map((_, k) => rowWidths[colIdx + 1 + k]);
+                          handleResizeMouseDown(e, globalIdx, rightIds, rowWidths[colIdx], rightWidths);
+                        }}
+                        style={{ position: "absolute", top: 0, right: -4, bottom: 0, width: 8, cursor: "col-resize", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center" }}
+                        title="Drag to resize"
+                      >
+                        <div style={{ width: 3, height: "40%", borderRadius: 2, background: resizingIdx === globalIdx ? color.badgeColor : "#d1d5db", transition: "background 0.15s" }} className="hover:!bg-blue-400" />
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              // Masonry: when row1 has >1 col, items belonging to the same column stack
+              // under each other. Overflow rows (different count than row1) render below.
+              // When row1 has exactly 1 item, everything is independent (no column stacking).
+              const row1Len = row1.length;
+
+              if (row1Len <= 1) {
+                // Single-column row1 — keep simple row-per-row grid
+                return (
+                  <div ref={subsRowRef} style={{ marginTop: "4px" }}>
+                    {rows.map((row, rIdx) => {
+                      const rowWidths = rIdx === 0 ? row1Widths : getWidthsForRow(row);
+                      const rowCols = rowWidths.map(w => `${w}fr`).join(" ");
+                      return (
+                        <div
+                          key={row[0]?.sub._uiId ?? rIdx}
+                          style={{ display: "grid", gridTemplateColumns: rowCols, gap: `${GAP}px`, alignItems: "start", marginBottom: rIdx < rows.length - 1 ? `${GAP}px` : 0 }}
+                        >
+                          {row.map(({ sub, globalIdx }, colIdx) =>
+                            renderCard(sub, globalIdx, colIdx, row, rowWidths)
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // Multi-column masonry — distribute items into column buckets
+              const columns: { sub: Subsection; globalIdx: number }[][] =
+                Array.from({ length: row1Len }, () => []);
+              const overflowRows: typeof rows = [];
+
+              for (const row of rows) {
+                if (row.length === row1Len) {
+                  row.forEach(({ sub, globalIdx }, ci) => columns[ci].push({ sub, globalIdx }));
+                } else {
+                  overflowRows.push(row);
+                }
+              }
+
+              return (
+                <div ref={subsRowRef} style={{ marginTop: "4px" }}>
+                  {/* Masonry columns — each column stacks independently */}
+                  <div style={{ display: "flex", gap: `${GAP}px`, alignItems: "flex-start" }}>
+                    {columns.map((colItems, colIdx) => (
+                      <div
+                        key={`col-${colIdx}`}
+                        style={{
+                          flex: `${row1Widths[colIdx]}`,
+                          minWidth: "80px",
+                          position: "relative",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: `${GAP}px`,
+                        }}
+                      >
+                        {colItems.map(({ sub, globalIdx }) => {
+                          const itemRow = rows.find(r => r.some(x => x.globalIdx === globalIdx))!;
+                          const itemColInRow = itemRow.findIndex(x => x.globalIdx === globalIdx);
+                          return renderCard(sub, globalIdx, itemColInRow, itemRow, row1Widths, true);
                         })}
+                        {/* Column resize handle — between this column and the next */}
+                        {colIdx < columns.length - 1 && (
+                          <div
+                            onMouseDown={(e) => {
+                              const rightIds = row1.slice(colIdx + 1).map(r => r.globalIdx);
+                              const rightWidths = row1Widths.slice(colIdx + 1);
+                              handleResizeMouseDown(e, row1[colIdx].globalIdx, rightIds, row1Widths[colIdx], rightWidths);
+                            }}
+                            style={{ position: "absolute", top: 0, right: -4, bottom: 0, width: 8, cursor: "col-resize", zIndex: 20, display: "flex", alignItems: "center", justifyContent: "center" }}
+                            title="Drag to resize"
+                          >
+                            <div style={{ width: 3, height: "40%", borderRadius: 2, background: resizingIdx === row1[colIdx].globalIdx ? color.badgeColor : "#d1d5db", transition: "background 0.15s" }} className="hover:!bg-blue-400" />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                );
-              })()}
+                  {/* Overflow rows — different column count, render independently below */}
+                  {overflowRows.map((row, i) => {
+                    const rowWidths = getWidthsForRow(row);
+                    const rowCols = rowWidths.map(w => `${w}fr`).join(" ");
+                    return (
+                      <div
+                        key={`overflow-${i}`}
+                        style={{ display: "grid", gridTemplateColumns: rowCols, gap: `${GAP}px`, alignItems: "start", marginTop: `${GAP}px` }}
+                      >
+                        {row.map(({ sub, globalIdx }, colIdx) =>
+                          renderCard(sub, globalIdx, colIdx, row, rowWidths)
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             </>
           )}
 

@@ -79,7 +79,7 @@ export function CheatsheetList({ onMoveToGroup, onToggleShare, onPreview, onNewI
         className={`rounded-lg transition-colors ${isDragOver ? "ring-1 ring-white/40 bg-white/10" : ""}`}
       >
         {groups.length > 0 && (ungrouped.length > 0 || isDragOver) && (
-          <p className={`text-[10px] uppercase tracking-wider px-2 pt-2 pb-1 ${isDragOver ? "text-white/60" : "text-white/40"}`}>
+          <p className={`text-[11px] uppercase tracking-wider px-2 pt-2 pb-1 ${isDragOver ? "text-white/60" : "text-white/40"}`}>
             {isDragOver ? t("sidebar_dropToUngroup") : t("sidebar_ungrouped")}
           </p>
         )}

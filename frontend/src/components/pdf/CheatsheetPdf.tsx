@@ -132,10 +132,11 @@ interface Props {
   data: CheatsheetData;
   resolvedSrcs: Record<string, string>;
   renderedLines?: Record<string, RenderedLine>;
-  subsectionCols?: number;
+  /** When set, overrides rowBreak layout and forces all subsections into N equal columns */
+  colOverride?: number;
 }
 
-export function CheatsheetPdf({ data, resolvedSrcs, renderedLines = {}, subsectionCols = 3 }: Props) {
+export function CheatsheetPdf({ data, resolvedSrcs, renderedLines = {}, colOverride }: Props) {
   const hasDescriptions = (data.sections || []).some((s) => s.description);
 
   return (
@@ -183,7 +184,7 @@ export function CheatsheetPdf({ data, resolvedSrcs, renderedLines = {}, subsecti
         {/* Sections — single column, subsections inside use multi-column grid */}
         <View style={styles.sectionsStack}>
           {(data.sections || []).map((section, idx) => (
-            <PdfSectionBlock key={section._uiId ?? idx} section={section} colorIndex={idx} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} subsectionCols={subsectionCols} />
+            <PdfSectionBlock key={section._uiId ?? idx} section={section} colorIndex={idx} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} colOverride={colOverride} />
           ))}
         </View>
 

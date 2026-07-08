@@ -55,6 +55,11 @@ mark.search-hl-editor {
 .renderer-text-line ol         { margin: 0.2em 0; padding-left: 1.2em; list-style: decimal; }
 .renderer-text-line li         { margin: 0; }
 .renderer-text-line blockquote { margin: 0; padding-left: 0.5em; border-left: none; color: inherit; font-style: normal; }
+.renderer-text-line table      { border-collapse: collapse; width: 100%; margin: 0.4em 0; font-size: 0.9em; }
+.renderer-text-line th,
+.renderer-text-line td         { border: 1px solid #d1d5db; padding: 3px 8px; text-align: left; }
+.renderer-text-line th         { background: rgba(0,0,0,0.05); font-weight: 600; }
+.renderer-text-line tr:nth-child(even) td { background: rgba(0,0,0,0.02); }
 
 /* ── Drag-and-drop animations ───────────────────────────────── */
 @keyframes drop-land {

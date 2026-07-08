@@ -1,10 +1,8 @@
 import { View, Text, StyleSheet } from "@react-pdf/renderer";
 import type { Section, Subsection } from "@/types/cheatsheet";
 import { getColorForIndex } from "@/components/renderer/sectionColors";
-import { PdfCodeLine } from "./PdfCodeLine";
+import { PdfCodeLine, splitTextSegments, PdfMarkdownTable, stripInlineMarkdown } from "./PdfCodeLine";
 import type { RenderedLine } from "@/lib/latexToPng";
-
-const PAGE_H = 560;
 
 const styles = StyleSheet.create({
   container: {
@@ -75,22 +73,6 @@ function lightenHex(hex: string, amount: number): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-function estimateHeight(sub: Subsection, colWidthPt: number): number {
-  const charsPerLine = Math.floor(colWidthPt / 5.2);
-  let h = 18;
-  for (const line of sub.lines ?? []) {
-    if (line.type === "image") {
-      h += 80;
-    } else if (line.type === "text") {
-      const chars = (line.text || "").length;
-      h += Math.max(10, Math.ceil(chars / (charsPerLine * 1.4)) * 10) + 2;
-    } else {
-      const chars = (line.command || "").length;
-      h += Math.max(12, Math.ceil(chars / charsPerLine) * 10);
-    }
-  }
-  return h + 8;
-}
 
 interface SubsectionCardProps {
   sub: Subsection;
@@ -122,54 +104,106 @@ interface Props {
   colorIndex: number;
   resolvedSrcs: Record<string, string>;
   renderedLines: Record<string, RenderedLine>;
-  subsectionCols?: number;
+  /** When set, overrides rowBreak layout and forces all subsections into N equal columns */
+  colOverride?: number;
 }
 
-export function PdfSectionBlock({ section, colorIndex, resolvedSrcs, renderedLines, subsectionCols = 3 }: Props) {
+export function PdfSectionBlock({ section, colorIndex, resolvedSrcs, renderedLines, colOverride }: Props) {
   const color = getColorForIndex(colorIndex);
   const accentColor = color.badgeColor;
   const headerBg = lightenHex(accentColor, 0.85);
 
   const subs = section.subsections ?? [];
   const hasLines = (section.lines ?? []).length > 0;
+  const GAP = 4;
 
-  const cols = Math.min(subsectionCols, Math.max(1, subs.length));
-  const gutterPct = 1;
-  const colWidthPct = (100 - gutterPct * (cols - 1)) / cols;
-  const colWidthPt = Math.floor((557 - 4 * (cols - 1)) / cols);
+  // ── Column-override mode: ignore rowBreak, force N equal columns ──────────
+  if (colOverride && colOverride > 1 && subs.length > 0) {
+    const n = Math.min(colOverride, subs.length);
+    const forcedCols: { sub: Subsection; globalIdx: number }[][] = Array.from({ length: n }, () => []);
+    subs.forEach((sub, i) => forcedCols[i % n].push({ sub, globalIdx: i }));
 
-  const chunks: Array<{ colItems: Array<Array<{ sub: Subsection; globalIdx: number }>> }> = [];
-  let remaining = subs.map((sub, idx) => ({ sub, idx }));
-
-  while (remaining.length > 0) {
-    const colHeights = Array(cols).fill(0) as number[];
-    const colItems: Array<Array<{ sub: Subsection; globalIdx: number }>> = Array.from({ length: cols }, () => []);
-    const consumed: number[] = [];
-
-    for (let i = 0; i < remaining.length; i++) {
-      const { sub, idx } = remaining[i];
-      const h = estimateHeight(sub, colWidthPt);
-      const shortest = colHeights.indexOf(Math.min(...colHeights));
-      if (colHeights[shortest] + h > PAGE_H && consumed.length > 0) break;
-      colItems[shortest].push({ sub, globalIdx: idx });
-      colHeights[shortest] += h;
-      consumed.push(i);
-    }
-
-    chunks.push({ colItems });
-    for (let i = consumed.length - 1; i >= 0; i--) {
-      remaining.splice(consumed[i], 1);
-    }
+    return (
+      <View style={[styles.container, { borderLeftWidth: 2, borderLeftColor: accentColor }]}>
+        <View wrap={false}>
+          <View style={[styles.header, { backgroundColor: headerBg }]}>
+            <View style={[styles.badge, styles.headerBadgeWrap, { backgroundColor: accentColor }]}>
+              <Text style={styles.badgeText}>{colorIndex + 1}</Text>
+            </View>
+            <Text style={styles.title}>{(section.title || "Untitled").replace(/[^\x00-\x7F]/g, "")}</Text>
+          </View>
+          {(() => {
+            const descriptionSegs = section.description ? splitTextSegments(section.description) : null;
+            const descHasTable = descriptionSegs?.some((s) => s.kind === "table") ?? false;
+            const plain = !descHasTable && section.description
+              ? section.description.replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, "…").replace(/[*_`#[\]\\{}]/g, "").replace(/\s+/g, " ").trim()
+              : null;
+            if (descHasTable && descriptionSegs) {
+              return (
+                <View style={{ paddingHorizontal: 8, paddingBottom: 4 }}>
+                  {descriptionSegs.map((seg, si) =>
+                    seg.kind === "table" ? (
+                      <PdfMarkdownTable key={si} headers={seg.headers} rows={seg.rows} accentColor={accentColor} />
+                    ) : seg.content.trim() ? (
+                      <Text key={si} style={[styles.description, { paddingHorizontal: 0, marginBottom: 2 }]}>{stripInlineMarkdown(seg.content)}</Text>
+                    ) : null
+                  )}
+                </View>
+              );
+            }
+            return plain ? <Text style={styles.description}>{plain}</Text> : null;
+          })()}
+        </View>
+        {hasLines && (
+          <View style={styles.body}>
+            {section.lines.map((line, idx) => (
+              <PdfCodeLine key={idx} line={line} index={idx} accentColor={accentColor} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} />
+            ))}
+          </View>
+        )}
+        <View style={styles.subsectionsBody}>
+          <View style={styles.columnsRow}>
+            {forcedCols.map((colItems, ci) => (
+              <View key={ci} style={[styles.column, { flex: 1, marginRight: ci < forcedCols.length - 1 ? GAP : 0 }]}>
+                {colItems.map(({ sub, globalIdx }) => (
+                  <SubsectionCard key={sub._uiId ?? globalIdx} sub={sub} label={`${colorIndex + 1}.${globalIdx + 1}`} accentColor={accentColor} headerBg={headerBg} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} />
+                ))}
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    );
   }
 
-  // Strip LaTeX from description for plain text rendering in PDF
-  const plainDescription = section.description
-    ? section.description
-        .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, "…")
-        .replace(/[*_`#[\]\\{}]/g, "")
-        .replace(/\s+/g, " ")
-        .trim()
-    : null;
+  // ── Default: rowBreak-based masonry (same logic as SectionBlock renderer) ─
+  const subRows: Array<{ sub: Subsection; globalIdx: number }[]> = [];
+  let curRow: { sub: Subsection; globalIdx: number }[] = [];
+  for (let i = 0; i < subs.length; i++) {
+    if (subs[i].rowBreak && curRow.length > 0) { subRows.push(curRow); curRow = []; }
+    curRow.push({ sub: subs[i], globalIdx: i });
+    if (curRow.length === 3) { subRows.push(curRow); curRow = []; }
+  }
+  if (curRow.length > 0) subRows.push(curRow);
+
+  const row1 = subRows[0] ?? [];
+  const row1Len = row1.length;
+  const assigned1 = row1.map(r => r.sub.widthPercent ?? null);
+  const fixed1 = assigned1.reduce<number>((s, w) => s + (w ?? 0), 0);
+  const free1 = assigned1.filter(w => w === null).length;
+  const freeW1 = free1 > 0 ? Math.max(10, (100 - fixed1) / free1) : 0;
+  const row1Widths = assigned1.map(w => w !== null ? w : freeW1);
+
+  const descriptionSegs = section.description ? splitTextSegments(section.description) : null;
+  const descHasTable = descriptionSegs?.some((s) => s.kind === "table") ?? false;
+  const plainDescription =
+    !descHasTable && section.description
+      ? section.description
+          .replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, "…")
+          .replace(/[*_`#[\]\\{}]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+      : null;
 
   return (
     <View style={[styles.container, { borderLeftWidth: 2, borderLeftColor: accentColor }]}>
@@ -180,7 +214,19 @@ export function PdfSectionBlock({ section, colorIndex, resolvedSrcs, renderedLin
           </View>
           <Text style={styles.title}>{(section.title || "Untitled").replace(/[^\x00-\x7F]/g, "")}</Text>
         </View>
-        {plainDescription ? (
+        {descHasTable && descriptionSegs ? (
+          <View style={{ paddingHorizontal: 8, paddingBottom: 4 }}>
+            {descriptionSegs.map((seg, si) =>
+              seg.kind === "table" ? (
+                <PdfMarkdownTable key={si} headers={seg.headers} rows={seg.rows} accentColor={accentColor} />
+              ) : seg.content.trim() ? (
+                <Text key={si} style={[styles.description, { paddingHorizontal: 0, marginBottom: 2 }]}>
+                  {stripInlineMarkdown(seg.content)}
+                </Text>
+              ) : null
+            )}
+          </View>
+        ) : plainDescription ? (
           <Text style={styles.description}>{plainDescription}</Text>
         ) : null}
       </View>
@@ -193,36 +239,54 @@ export function PdfSectionBlock({ section, colorIndex, resolvedSrcs, renderedLin
         </View>
       )}
 
-      {chunks.length > 0 && (
+      {subs.length > 0 && (
         <View style={styles.subsectionsBody}>
-          {chunks.map((chunk, chunkIdx) => (
-            <View key={chunkIdx} wrap={false} style={styles.columnsRow}>
-              {chunk.colItems.map((items, cIdx) => (
-                <View
-                  key={cIdx}
-                  style={[
-                    styles.column,
-                    {
-                      width: `${colWidthPct}%`,
-                      marginRight: cIdx < cols - 1 ? `${gutterPct}%` : 0,
-                    },
-                  ]}
-                >
-                  {items.map(({ sub, globalIdx }) => (
-                    <SubsectionCard
-                      key={sub._uiId ?? globalIdx}
-                      sub={sub}
-                      label={`${colorIndex + 1}.${globalIdx + 1}`}
-                      accentColor={accentColor}
-                      headerBg={headerBg}
-                      resolvedSrcs={resolvedSrcs}
-                      renderedLines={renderedLines}
-                    />
+          {row1Len <= 1 ? (
+            // Single-column row1: render each row independently
+            subRows.map((row, rIdx) => (
+              <View key={rIdx} wrap={false} style={[styles.columnsRow, { marginBottom: rIdx < subRows.length - 1 ? GAP : 0 }]}>
+                {row.map(({ sub, globalIdx }) => (
+                  <View key={sub._uiId ?? globalIdx} style={[styles.column, { flex: 1 }]}>
+                    <SubsectionCard sub={sub} label={`${colorIndex + 1}.${globalIdx + 1}`} accentColor={accentColor} headerBg={headerBg} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} />
+                  </View>
+                ))}
+              </View>
+            ))
+          ) : (() => {
+            // Multi-column masonry: items in the same column stack under each other
+            const columns: Array<{ sub: Subsection; globalIdx: number }[]> =
+              Array.from({ length: row1Len }, () => []);
+            const overflowRows: typeof subRows = [];
+            for (const row of subRows) {
+              if (row.length === row1Len) {
+                row.forEach(({ sub, globalIdx }, ci) => columns[ci].push({ sub, globalIdx }));
+              } else {
+                overflowRows.push(row);
+              }
+            }
+            return (
+              <View>
+                <View style={styles.columnsRow}>
+                  {columns.map((colItems, ci) => (
+                    <View key={ci} style={[styles.column, { flex: row1Widths[ci], marginRight: ci < columns.length - 1 ? GAP : 0 }]}>
+                      {colItems.map(({ sub, globalIdx }) => (
+                        <SubsectionCard key={sub._uiId ?? globalIdx} sub={sub} label={`${colorIndex + 1}.${globalIdx + 1}`} accentColor={accentColor} headerBg={headerBg} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} />
+                      ))}
+                    </View>
                   ))}
                 </View>
-              ))}
-            </View>
-          ))}
+                {overflowRows.map((row, i) => (
+                  <View key={`overflow-${i}`} wrap={false} style={[styles.columnsRow, { marginTop: GAP }]}>
+                    {row.map(({ sub, globalIdx }) => (
+                      <View key={sub._uiId ?? globalIdx} style={[styles.column, { flex: 1 }]}>
+                        <SubsectionCard sub={sub} label={`${colorIndex + 1}.${globalIdx + 1}`} accentColor={accentColor} headerBg={headerBg} resolvedSrcs={resolvedSrcs} renderedLines={renderedLines} />
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
         </View>
       )}
     </View>

@@ -1,6 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, Boolean, DateTime, LargeBinary, UniqueConstraint, ForeignKey
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy import Integer, String, Boolean, DateTime, LargeBinary, UniqueConstraint, ForeignKey, JSON
 from sqlalchemy.orm import relationship, mapped_column, Mapped
 from app.database import Base
 

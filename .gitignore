@@ -20,6 +20,7 @@ $RECYCLE.BIN/
 # ============================================
 # Carpetas de entornos virtuales (no se deben versionar)
 venv/
+venv_desktop/
 env/
 ENV/
 .venv/

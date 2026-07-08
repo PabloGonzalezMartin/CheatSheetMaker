@@ -9,7 +9,7 @@ services:
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - cheetsheetmaker_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -18,8 +18,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ${INSTANCE_NAME}-backend
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -46,4 +46,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  cheetsheetmaker_pgdata:
+    external: true

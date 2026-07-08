@@ -9,8 +9,14 @@ interface Props {
 }
 
 const DEBOUNCE_MS = 800;
-const COL_OPTIONS = [1, 2, 3] as const;
-type ColOption = typeof COL_OPTIONS[number];
+
+const COL_OPTIONS = [
+  { value: 0, label: "Auto", title: "Layout from editor (masonry / rowBreak)" },
+  { value: 1, label: "1", title: "Force 1 column" },
+  { value: 2, label: "2", title: "Force 2 columns" },
+  { value: 3, label: "3", title: "Force 3 columns" },
+] as const;
+type ColOverride = 0 | 1 | 2 | 3;
 
 // Build a full printable HTML page from the cheatsheet data using KaTeX for math
 function collectImageSrcs(data: CheatsheetData): string[] {
@@ -37,7 +43,7 @@ async function resolveImageSrcs(srcs: string[]): Promise<Record<string, string>>
   return Object.fromEntries(pairs.filter((p): p is [string, string] => p !== null));
 }
 
-function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolvedSrcs: Record<string, string> = {}): string {
+function buildPrintHtml(data: CheatsheetData, resolvedSrcs: Record<string, string> = {}, colOverride: ColOverride = 0): string {
   const katexCss = `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">`;
   const katexJs = `<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\\\(',right:'\\\\)',display:false},{left:'\\\\[',right:'\\\\]',display:true}]});window.parent.postMessage('katex-ready','*');"></script>`;
@@ -47,11 +53,44 @@ function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolve
   }
 
   function renderMd(text: string): string {
-    // For plain text lines — escape HTML first, then apply markdown inline.
     return escHtml(text)
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/`([^`]+)`/g, "<code>$1</code>");
+  }
+
+  function isTableSep(line: string): boolean {
+    return line.split("|").every((c) => /^\s*:?-+:?\s*$/.test(c.trim()) || c.trim() === "");
+  }
+
+  function renderTextBlock(raw: string): string {
+    const lines = raw.split("\n");
+    const out: string[] = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (lines[i].trim().includes("|")) {
+        let sepIdx = i + 1;
+        while (sepIdx < lines.length && lines[sepIdx].trim() === "") sepIdx++;
+        if (sepIdx < lines.length && isTableSep(lines[sepIdx])) {
+          const parseRow = (l: string) => l.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+          const headers = parseRow(lines[i]);
+          const tableRows: string[][] = [];
+          let j = sepIdx + 1;
+          while (j < lines.length && lines[j].trim().includes("|")) {
+            tableRows.push(parseRow(lines[j]));
+            j++;
+          }
+          const thead = `<thead><tr>${headers.map((h) => `<th>${renderMd(h)}</th>`).join("")}</tr></thead>`;
+          const tbody = `<tbody>${tableRows.map((row, ri) => `<tr>${headers.map((_, ci) => `<td>${renderMd(row[ci] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody>`;
+          out.push(`<table>${thead}${tbody}</table>`);
+          i = j;
+          continue;
+        }
+      }
+      if (lines[i].trim()) out.push(`<p>${renderMd(lines[i])}</p>`);
+      i++;
+    }
+    return out.join("");
   }
 
   function renderDesc(text: string): string {
@@ -113,7 +152,6 @@ function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolve
     const color = getColor(si);
     const headerBg = lighten(color, 0.88);
     const subs = section.subsections ?? [];
-    const cols = Math.min(subsectionCols, subs.length || 1);
 
     const linesHtml = (section.lines ?? []).map((line, li) => {
       if (line.type === "image" && line.src) {
@@ -123,60 +161,127 @@ function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolve
         return `<div style="text-align:center;margin:4px 0"><img src="${imgSrc}" style="max-width:${w};border-radius:4px"></div>`;
       }
       if (line.type === "text") {
-        return `<div class="text-line" style="background:${color}11;padding:3px 8px;margin:1px 0;border-radius:3px;font-size:7.5pt;color:#2c3e50;line-height:1.2">${renderMd(line.text || "")}</div>`;
+        return `<div class="text-line" style="background:${color}11;padding:3px 8px;margin:1px 0;border-radius:3px;font-size:7.5pt;color:#2c3e50;line-height:1.4">${renderTextBlock(line.text || "")}</div>`;
       }
       const cmd = renderCmd(line.command || "");
       const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;flex-shrink:0;max-width:38%;text-align:right;word-break:break-word;white-space:normal;padding-left:8px;align-self:center;line-height:1.3">${escHtml(line.comment)}</span>` : "";
       const rowBg = li % 2 === 0 ? "#f8f9fa" : "#ffffff";
-      return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 8px;color:#2c3e50;background:${rowBg};margin:0;display:flex;align-items:center;overflow:hidden"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cmd}</span>${cmt}</div>`;
-    }).join("");
+      return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 8px;color:#2c3e50;background:${rowBg};margin:0;display:flex;align-items:flex-start"><span style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-all">${cmd}</span>${cmt}</div>`;
+    });
 
     const subsHtml = subs.length === 0 ? "" : (() => {
-      const columns: typeof subs[] = Array.from({ length: cols }, () => []);
-      subs.forEach((s, i) => columns[i % cols].push(s));
-      const colsHtml = columns.map((colSubs) => {
-        const subsContent = colSubs.map((sub) => {
-          const sIdx = subs.indexOf(sub);
-          const subLines = (sub.lines ?? []).map((line, li) => {
-            if (line.type === "image" && line.src) {
-              const imgSrc = resolvedSrcs[line.src];
-              if (!imgSrc) return "";
-              return `<div style="text-align:center;margin:2px 0"><img src="${imgSrc}" style="max-width:100%;border-radius:3px"></div>`;
-            }
-            if (line.type === "text") {
-              return `<div class="text-line" style="padding:3px 6px;font-size:7.5pt;color:#2c3e50;line-height:1.5;background:${color}11;margin:1px 0;border-radius:2px">${renderMd(line.text || "")}</div>`;
-            }
-            const cmd = renderCmd(line.command || "");
-            const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;flex-shrink:0;max-width:38%;text-align:right;word-break:break-word;white-space:normal;padding-left:8px;align-self:center;line-height:1.3">${escHtml(line.comment)}</span>` : "";
-            const rowBg = li % 2 === 0 ? "#f8f9fa" : "#ffffff";
-            return `<div style="font-family:monospace;font-size:7.5pt;padding:2px 6px;color:#2c3e50;background:${rowBg};margin:0;display:flex;align-items:center;overflow:hidden"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cmd}</span>${cmt}</div>`;
-          }).join("");
-          return `<div style="margin-bottom:4px;border:1px solid #e0e0e0;border-left:2px solid ${color};border-radius:3px;overflow:hidden;break-inside:avoid">
+      type SubItem = typeof subs[0];
+
+      const renderSubCard = (sub: SubItem, sIdx: number): string => {
+        const subLinesArr = (sub.lines ?? []).map((line, li) => {
+          if (line.type === "image" && line.src) {
+            const imgSrc = resolvedSrcs[line.src];
+            if (!imgSrc) return "";
+            return `<div class="sub-row" style="text-align:center;margin:2px 0"><img src="${imgSrc}" style="max-width:100%;border-radius:3px"></div>`;
+          }
+          if (line.type === "text") {
+            return `<div class="sub-row text-line" style="padding:3px 6px;font-size:7.5pt;color:#2c3e50;line-height:1.4;background:${color}11;margin:1px 0;border-radius:2px">${renderTextBlock(line.text || "")}</div>`;
+          }
+          const cmd = renderCmd(line.command || "");
+          const cmt = line.comment ? `<span style="color:#6c757d;font-style:italic;font-size:7pt;flex-shrink:0;max-width:38%;text-align:right;word-break:break-word;white-space:normal;padding-left:8px;align-self:center;line-height:1.3">${escHtml(line.comment)}</span>` : "";
+          const rowBg = li % 2 === 0 ? "#f8f9fa" : "#ffffff";
+          return `<div class="sub-row" style="font-family:monospace;font-size:7.5pt;padding:2px 6px;color:#2c3e50;background:${rowBg};margin:0;display:flex;align-items:flex-start"><span style="flex:1;min-width:0;white-space:pre-wrap;word-break:break-all">${cmd}</span>${cmt}</div>`;
+        }).filter(Boolean);
+        const firstLine = subLinesArr[0] ?? "";
+        const restLines = subLinesArr.slice(1).join("");
+        return `<div style="margin-bottom:4px;border:1px solid #e0e0e0;border-left:2px solid ${color};border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone">
+          <div style="break-inside:avoid">
             <div style="background:${headerBg};padding:3px 6px;font-size:7pt;font-weight:bold;color:#2c3e50">
               <span style="background:${color};color:white;border-radius:2px;padding:1px 4px;font-size:6pt;margin-right:4px">${si + 1}.${sIdx + 1}</span>${escHtml(sub.title || "")}
             </div>
-            <div style="padding:2px 0">${subLines}</div>
-          </div>`;
+            ${firstLine ? `<div style="padding:2px 0 0">${firstLine}</div>` : ""}
+          </div>
+          ${restLines ? `<div style="padding:0 0 2px">${restLines}</div>` : ""}
+        </div>`;
+      };
+
+      // ── Column override: ignore rowBreak, force N equal columns ──────────
+      if (colOverride >= 1) {
+        const n = Math.min(colOverride, subs.length);
+        const forcedCols: Array<Array<{sub: SubItem; sIdx: number}>> = Array.from({length: n}, () => []);
+        subs.forEach((sub, i) => forcedCols[i % n].push({sub, sIdx: i}));
+        const colsHtml = forcedCols.map(colItems => {
+          const content = colItems.map(({sub, sIdx}) => renderSubCard(sub, sIdx)).join("");
+          return `<div style="flex:1;min-width:0">${content}</div>`;
         }).join("");
-        return `<div style="flex:1;min-width:0">${subsContent}</div>`;
+        return `<div style="display:flex;gap:6px;align-items:flex-start">${colsHtml}</div>`;
+      }
+
+      // ── Auto: rowBreak-based masonry ─────────────────────────────────────
+      const subRows: SubItem[][] = [];
+      let curRow: SubItem[] = [];
+      for (const sub of subs) {
+        if (sub.rowBreak && curRow.length > 0) { subRows.push(curRow); curRow = []; }
+        curRow.push(sub);
+        if (curRow.length === 3) { subRows.push(curRow); curRow = []; }
+      }
+      if (curRow.length > 0) subRows.push(curRow);
+
+      const row1 = subRows[0] ?? [];
+      const row1Len = row1.length;
+      const assigned1 = row1.map((s: SubItem) => s.widthPercent ?? null);
+      const fixed1 = assigned1.reduce((sum: number, w: number | null) => sum + (w ?? 0), 0);
+      const free1 = assigned1.filter((w: number | null) => w === null).length;
+      const freeW1 = free1 > 0 ? Math.max(10, (100 - fixed1) / free1) : 0;
+      const row1Widths = assigned1.map((w: number | null) => w !== null ? w : freeW1);
+
+      if (row1Len <= 1) {
+        return subRows.map(row => {
+          const items = row.map(sub => `<div style="flex:1;min-width:0">${renderSubCard(sub, subs.indexOf(sub))}</div>`).join("");
+          return `<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:4px">${items}</div>`;
+        }).join("");
+      }
+
+      const columns: Array<Array<{sub: SubItem; sIdx: number}>> = Array.from({length: row1Len}, () => []);
+      const overflowRows: SubItem[][] = [];
+      for (const row of subRows) {
+        if (row.length === row1Len) {
+          row.forEach((sub, ci) => columns[ci].push({sub, sIdx: subs.indexOf(sub)}));
+        } else {
+          overflowRows.push(row);
+        }
+      }
+
+      const columnsHtml = columns.map((colItems, ci) => {
+        const content = colItems.map(({sub, sIdx}) => renderSubCard(sub, sIdx)).join("");
+        return `<div style="flex:${row1Widths[ci]};min-width:0">${content}</div>`;
       }).join("");
-      return `<div style="display:flex;gap:6px;align-items:flex-start">${colsHtml}</div>`;
+      const overflowHtml = overflowRows.map(row => {
+        const items = row.map(sub => `<div style="flex:1;min-width:0">${renderSubCard(sub, subs.indexOf(sub))}</div>`).join("");
+        return `<div style="display:flex;gap:6px;align-items:flex-start;margin-top:4px">${items}</div>`;
+      }).join("");
+
+      return `<div style="display:flex;gap:6px;align-items:flex-start">${columnsHtml}</div>${overflowHtml}`;
     })();
 
     const descInner = section.description
       ? `<div class="desc-block" style="padding:3px 10px 5px 0;font-size:7.5pt;color:#555;line-height:1.5">${renderDesc(section.description)}</div>`
       : "";
 
-    return `<div style="margin-bottom:6px;border:1px solid #e0e0e0;border-left:2px solid ${color};border-radius:4px;overflow:hidden;break-inside:avoid">
-      <div style="background:${headerBg};padding:5px 10px ${section.description ? "5px" : "5px"} 10px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="background:${color};color:white;border-radius:3px;padding:2px 6px;font-size:7pt;font-weight:bold;flex-shrink:0">${si + 1}</span>
-          <span style="font-size:8.5pt;font-weight:bold;color:#2c3e50">${escHtml(section.title || "")}</span>
+    const firstLine = linesHtml.length > 0 ? linesHtml[0] : "";
+    const restLines = linesHtml.slice(1).join("");
+    // When no lines exist, anchor the header to the first subsection card so the
+    // title is never left alone at the bottom of a page without any content below it.
+    const hasLines = linesHtml.length > 0;
+
+    return `<div id="section-${si}" style="margin-bottom:6px;border:1px solid #e0e0e0;border-left:2px solid ${color};border-radius:4px;overflow:hidden">
+      <div style="break-inside:avoid;break-after:avoid">
+        <div style="background:${headerBg};padding:5px 10px 5px 10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="background:${color};color:white;border-radius:3px;padding:2px 6px;font-size:7pt;font-weight:bold;flex-shrink:0">${si + 1}</span>
+            <span style="font-size:8.5pt;font-weight:bold;color:#2c3e50">${escHtml(section.title || "")}</span>
+          </div>
+          ${descInner}
         </div>
-        ${descInner}
+        ${firstLine ? `<div style="padding:3px 0 0">${firstLine}</div>` : ""}
       </div>
-      ${linesHtml ? `<div style="padding:3px 0 0">${linesHtml}</div>` : ""}
-      ${subsHtml ? `<div style="padding:${linesHtml ? "3px" : "4px"} 6px 6px">${subsHtml}</div>` : ""}
+      ${restLines ? `<div style="padding:0">${restLines}</div>` : ""}
+      ${subsHtml ? `<div style="padding:${hasLines ? "3px" : "4px"} 6px 6px">${subsHtml}</div>` : ""}
     </div>`;
   }).join("");
 
@@ -184,13 +289,13 @@ function buildPrintHtml(data: CheatsheetData, subsectionCols: ColOption, resolve
     const plainDesc = s.description
       ? s.description.replace(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g, "").replace(/[*_`#[\]\\{}]/g, "").replace(/\s+/g, " ").trim().substring(0, 55) + (s.description.length > 55 ? "…" : "")
       : "";
-    return `<div style="width:25%;padding:3px 5px;border-bottom:1px solid #f3f4f6;border-right:1px solid #f3f4f6;box-sizing:border-box">
+    return `<a href="#section-${i}" class="idx-item" style="width:25%;padding:3px 5px;border-bottom:1px solid #f3f4f6;border-right:1px solid #f3f4f6;box-sizing:border-box;text-decoration:none;display:block;cursor:pointer;transition:background 0.15s">
       <div style="display:flex;align-items:baseline;gap:3px;margin-bottom:1px">
         <span style="font-size:6pt;color:#9ca3af;font-weight:bold;flex-shrink:0">${i + 1}.</span>
         <span style="font-size:6.5pt;font-weight:bold;color:#374151">${escHtml(s.title || "")}</span>
       </div>
       ${plainDesc ? `<div style="font-size:5.5pt;color:#9ca3af;line-height:1.3">${escHtml(plainDesc)}</div>` : ""}
-    </div>`;
+    </a>`;
   }).join("");
 
   const indexHtml = `<div style="border:1px solid #e5e7eb;border-radius:4px;margin-bottom:8px;overflow:hidden">
@@ -213,6 +318,13 @@ ${katexJs}
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Tahoma, Verdana, sans-serif; background: white; color: #2c3e50; padding: 5mm 4mm; font-size: 8pt; }
   .text-line .katex { font-size: 0.95em; }
+  .text-line p { margin: 0 0 2px; }
+  .text-line table { border-collapse: collapse; width: 100%; margin: 2px 0; font-size: 7pt; }
+  .text-line th, .text-line td { border: 1px solid #c8cdd4; padding: 2px 5px; text-align: left; }
+  .text-line th { background: rgba(0,0,0,0.07); font-weight: 600; }
+  .text-line tr:nth-child(even) td { background: rgba(0,0,0,0.03); }
+  .idx-item:hover { background: #f0f4ff !important; }
+  .idx-item:hover span { color: #2563eb !important; }
   .desc-block strong { font-weight: 600; }
   .desc-block em { font-style: italic; }
   .desc-block code { font-family: monospace; font-size: 0.88em; background: rgba(0,0,0,0.06); padding: 0 3px; border-radius: 2px; }
@@ -222,6 +334,8 @@ ${katexJs}
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body { padding: 3mm 2mm; }
     @page { margin: 3mm 2mm; size: A4; }
+    .sub-row { break-inside: avoid; }
+    .attribution { break-inside: avoid; }
   }
 </style>
 </head>
@@ -232,11 +346,11 @@ ${katexJs}
   </div>
   ${indexHtml}
   ${sectionsHtml}
-  <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid #e0e0e0;font-size:6pt;color:#6c757d">
+  <div class="attribution" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;padding:8px 0 4px;border-top:1px solid #e0e0e0;font-size:8pt;color:#6c757d">
     <span>Made with CheatSheetMaker</span>
     <span>·</span>
-    <a href="https://www.linkedin.com/in/pablo-gonz%C3%A1lez-mart%C3%ADn-a026112a6/" style="display:inline-flex;align-items:center;gap:3px;color:#0077b5;text-decoration:none">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0077b5" width="9" height="9"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+    <a href="https://www.linkedin.com/in/pablo-gonz%C3%A1lez-mart%C3%ADn-a026112a6/" style="display:inline-flex;align-items:center;gap:4px;color:#0077b5;text-decoration:none;font-weight:500">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0077b5" width="12" height="12"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
       Pablo González Martín
     </a>
   </div>
@@ -247,7 +361,7 @@ ${katexJs}
 export function PdfViewerPanel({ data }: Props) {
   const { t } = useLanguage();
   const [stableData, setStableData] = useState(data);
-  const [subsectionCols, setSubsectionCols] = useState<ColOption>(3);
+  const [colOverride, setColOverride] = useState<ColOverride>(0);
   const [printing, setPrinting] = useState(false);
   const [katexReady, setKatexReady] = useState(false);
   const [resolvedSrcs, setResolvedSrcs] = useState<Record<string, string>>({});
@@ -268,18 +382,18 @@ export function PdfViewerPanel({ data }: Props) {
     resolveImageSrcs(srcs).then(setResolvedSrcs);
   }, [stableData]);
 
-  // Rebuild iframe content when data, cols, or resolved images change
+  // Rebuild iframe content when data, column override, or resolved images change
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
     setKatexReady(false);
-    const html = buildPrintHtml(stableData, subsectionCols, resolvedSrcs);
+    const html = buildPrintHtml(stableData, resolvedSrcs, colOverride);
     const doc = iframe.contentDocument;
     if (!doc) return;
     doc.open();
     doc.write(html);
     doc.close();
-  }, [stableData, subsectionCols, resolvedSrcs]);
+  }, [stableData, resolvedSrcs, colOverride]);
 
   // Listen for KaTeX ready signal from iframe
   useEffect(() => {
@@ -327,17 +441,21 @@ export function PdfViewerPanel({ data }: Props) {
   return (
     <div className="flex flex-col h-full w-full">
       <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-gray-200 shrink-0">
-        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("pdf_subsectionCols")}</span>
+        {/* Column override selector */}
+        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{t("pdf_subsectionCols")}</span>
         <div className="flex gap-1">
-          {COL_OPTIONS.map((n) => (
+          {COL_OPTIONS.map((opt) => (
             <button
-              key={n}
-              onClick={() => setSubsectionCols(n)}
-              className={`w-8 h-8 rounded text-sm font-semibold transition-colors ${
-                subsectionCols === n ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              key={opt.value}
+              title={opt.title}
+              onClick={() => setColOverride(opt.value as ColOverride)}
+              className={`h-7 px-2 rounded text-xs font-semibold transition-colors ${
+                colOverride === opt.value
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
             >
-              {n}
+              {opt.label}
             </button>
           ))}
         </div>

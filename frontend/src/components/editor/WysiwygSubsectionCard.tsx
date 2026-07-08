@@ -18,6 +18,8 @@ interface Props {
   onChange: (sub: Subsection) => void;
   onRemove: () => void;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+  onSendToNewRow?: () => void;   // move this subsection to start a new row below
+  onMergeRowUp?: () => void;     // merge back into the row above
 }
 
 export function WysiwygSubsectionCard({
@@ -29,6 +31,8 @@ export function WysiwygSubsectionCard({
   onChange,
   onRemove,
   dragHandleProps,
+  onSendToNewRow,
+  onMergeRowUp,
 }: Props) {
   const searchQuery = useEditorStore((s) => s.searchQuery);
   const expandedSubsections = useEditorStore((s) => s.expandedSubsections);
@@ -182,13 +186,33 @@ export function WysiwygSubsectionCard({
           borderBottom: collapsed ? "none" : "1px solid rgba(0,0,0,0.04)",
         }}
       >
-        {/* Drag handle */}
-        <div
-          {...dragHandleProps}
-          className="flex-shrink-0 cursor-grab text-gray-400 hover:text-gray-600 text-xs select-none opacity-0 group-hover/sub:opacity-60"
-          title={t("section_dragReorder")}
-          style={{ fontSize: "0.9rem" }}
-        >⠿</div>
+        {/* Drag handle + row controls */}
+        <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/sub:opacity-100 transition-opacity">
+          <div
+            {...dragHandleProps}
+            className="cursor-grab text-gray-400 hover:text-gray-600 select-none"
+            title={t("section_dragReorder")}
+            style={{ fontSize: "0.9rem" }}
+          >⠿</div>
+          {onMergeRowUp && (
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onMergeRowUp(); }}
+              className="text-gray-400 hover:text-blue-500 transition-colors leading-none"
+              title="Merge into row above"
+              style={{ fontSize: "0.6rem", padding: "1px 2px" }}
+            >↑</button>
+          )}
+          {onSendToNewRow && (
+            <button
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onSendToNewRow(); }}
+              className="text-gray-400 hover:text-blue-500 transition-colors leading-none"
+              title="Send to new row below"
+              style={{ fontSize: "0.6rem", padding: "1px 2px" }}
+            >↵</button>
+          )}
+        </div>
 
         {/* Collapse toggle */}
         <button

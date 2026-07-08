@@ -73,7 +73,7 @@ export function GroupSection({ group, items, onMoveToGroup, onToggleShare, onPre
       onDrop={handleDrop}
     >
       <div
-        className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer group"
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/10 cursor-pointer group"
         onClick={() => setCollapsed((v) => !v)}
       >
         <div
@@ -81,10 +81,9 @@ export function GroupSection({ group, items, onMoveToGroup, onToggleShare, onPre
           style={{ backgroundColor: group.color }}
         />
         <span className="flex-1 text-xs font-medium text-white/90 truncate">{group.name}</span>
-        <span className="text-white/50 text-xs">{items.length}</span>
         <button
           onClick={(e) => { e.stopPropagation(); onNewInGroup(group.id); }}
-          className="hidden group-hover:flex w-4 h-4 items-center justify-center text-white/50 hover:text-white text-sm font-bold leading-none"
+          className="hidden group-hover:flex w-7 h-7 items-center justify-center text-white/50 hover:text-white text-sm font-bold leading-none"
           title={`${t("sidebar_newInGroup")} "${group.name}"`}
         >
           +

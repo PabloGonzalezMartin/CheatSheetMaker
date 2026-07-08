@@ -148,10 +148,10 @@ export function Sidebar() {
 
             {/* Groups header */}
             <div className="flex items-center justify-between px-2 py-1 flex-shrink-0">
-              <span className="text-[10px] text-white/40 uppercase tracking-wider">{t("sidebar_groups")}</span>
+              <span className="text-[11px] text-white/40 uppercase tracking-wider">{t("sidebar_groups")}</span>
               <button
                 onClick={() => setShowCreateGroup(true)}
-                className="text-white/60 hover:text-white text-xs"
+                className="text-white/60 w-6 h-6 hover:text-white text-md"
                 title={t("sidebar_newGroup")}
               >
                 +

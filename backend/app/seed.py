@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from datetime import datetime
 from app.models import Cheatsheet
@@ -6,7 +7,19 @@ from app.models import Cheatsheet
 
 DEMO_CHEATSHEET_ID = "welcome_to_cheatsheetmaker"
 DEMO_CHEATSHEET_ES_ID = "bienvenido_a_cheatsheetmaker"
-_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+def _find_prompts_dir() -> Path:
+    # PyInstaller bundles extract to sys._MEIPASS at runtime; prompts/ is bundled there (see pyinstaller.spec)
+    if hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "prompts"
+    # Docker: WORKDIR /app contains app/ and prompts/ as siblings (see Dockerfile)
+    # Local dev: backend/app/seed.py -> repo root/prompts (3 levels up)
+    for candidate in (Path(__file__).parent.parent / "prompts", Path(__file__).parent.parent.parent / "prompts"):
+        if candidate.is_dir():
+            return candidate
+    return Path(__file__).parent.parent / "prompts"
+
+
+_PROMPTS_DIR = _find_prompts_dir()
 
 
 def _load_demo(filename: str, cheatsheet_id: str, now: datetime) -> dict:

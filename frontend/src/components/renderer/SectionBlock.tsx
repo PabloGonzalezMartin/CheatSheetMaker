@@ -181,30 +181,105 @@ export function SectionBlock({ section, index, searchQuery }: Props) {
                 </button>
               </div>
               {(() => {
-                const numCols = section.subsections.length >= 3 ? 3 : section.subsections.length;
-                const cols: typeof section.subsections[] = Array.from({ length: numCols }, () => []);
-                section.subsections.forEach((sub, i) => cols[i % numCols].push(sub));
+                const subs = section.subsections;
+                const GAP = 8;
+
+                // Rows respect rowBreak flags; also auto-break at 3 items.
+                const rows: { sub: typeof subs[0]; sIdx: number }[][] = [];
+                let currentRow: { sub: typeof subs[0]; sIdx: number }[] = [];
+                for (let i = 0; i < subs.length; i++) {
+                  if (subs[i].rowBreak && currentRow.length > 0) { rows.push(currentRow); currentRow = []; }
+                  currentRow.push({ sub: subs[i], sIdx: i });
+                  if (currentRow.length === 3) { rows.push(currentRow); currentRow = []; }
+                }
+                if (currentRow.length > 0) rows.push(currentRow);
+
+                // Row-1 widths from widthPercent on row-1 items; equal-share for unset
+                const row1 = rows[0] ?? [];
+                const assigned1 = row1.map((r) => r.sub.widthPercent ?? null);
+                const fixed1 = assigned1.reduce<number>((s, w) => s + (w ?? 0), 0);
+                const free1 = assigned1.filter((w) => w === null).length;
+                const freeW1 = free1 > 0 ? Math.max(10, (100 - fixed1) / free1) : 0;
+                const row1Widths = assigned1.map((w) => (w !== null ? w : freeW1));
+
+                // Masonry: when row1 has >1 col, items in the same column stack independently.
+              const row1Len = row1.length;
+
+              if (row1Len <= 1) {
+                // Single-column row1 — simple row-per-row grid
                 return (
-                  <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
-                    {cols.map((colSubs, cIdx) => (
-                      <div key={cIdx} style={{ flex: 1, minWidth: 0 }}>
-                        {colSubs.map((sub) => {
-                          const sIdx = section.subsections.indexOf(sub);
-                          return (
-                            <SubsectionBlock
-                              key={sub._uiId ?? sIdx}
-                              subsection={sub}
-                              sectionIndex={index}
-                              subsectionIndex={sIdx}
-                              color={color}
-                              searchQuery={searchQuery}
-                            />
-                          );
-                        })}
+                  <div>
+                    {rows.map((row, rIdx) => {
+                      const rowCols = row.map(() => "1fr").join(" ");
+                      return (
+                        <div
+                          key={row[0]?.sub._uiId ?? rIdx}
+                          style={{ display: "grid", gridTemplateColumns: rowCols, gap: `${GAP}px`, alignItems: "start", marginBottom: rIdx < rows.length - 1 ? `${GAP}px` : 0 }}
+                        >
+                          {row.map(({ sub, sIdx }) => (
+                            <div key={sub._uiId ?? sIdx} style={{ minWidth: "80px" }}>
+                              <SubsectionBlock subsection={sub} sectionIndex={index} subsectionIndex={sIdx} color={color} searchQuery={searchQuery} />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              // Multi-column masonry — distribute into column buckets
+              const columns: { sub: typeof subs[0]; sIdx: number }[][] =
+                Array.from({ length: row1Len }, () => []);
+              const overflowRows: typeof rows = [];
+
+              for (const row of rows) {
+                if (row.length === row1Len) {
+                  row.forEach(({ sub, sIdx }, ci) => columns[ci].push({ sub, sIdx }));
+                } else {
+                  overflowRows.push(row);
+                }
+              }
+
+              return (
+                <div>
+                  {/* Masonry flex columns */}
+                  <div style={{ display: "flex", gap: `${GAP}px`, alignItems: "flex-start" }}>
+                    {columns.map((colItems, colIdx) => (
+                      <div
+                        key={`col-${colIdx}`}
+                        style={{
+                          flex: `${row1Widths[colIdx]}`,
+                          minWidth: "80px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: `${GAP}px`,
+                        }}
+                      >
+                        {colItems.map(({ sub, sIdx }) => (
+                          <SubsectionBlock key={sub._uiId ?? sIdx} subsection={sub} sectionIndex={index} subsectionIndex={sIdx} color={color} searchQuery={searchQuery} />
+                        ))}
                       </div>
                     ))}
                   </div>
-                );
+                  {/* Overflow rows — different column count, render independently */}
+                  {overflowRows.map((row, i) => {
+                    const rowCols = row.map(() => "1fr").join(" ");
+                    return (
+                      <div
+                        key={`overflow-${i}`}
+                        style={{ display: "grid", gridTemplateColumns: rowCols, gap: `${GAP}px`, alignItems: "start", marginTop: `${GAP}px` }}
+                      >
+                        {row.map(({ sub, sIdx }) => (
+                          <div key={sub._uiId ?? sIdx} style={{ minWidth: "80px" }}>
+                            <SubsectionBlock subsection={sub} sectionIndex={index} subsectionIndex={sIdx} color={color} searchQuery={searchQuery} />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
               })()}
               </div>
             )}
